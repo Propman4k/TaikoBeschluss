@@ -233,7 +233,6 @@ export default function Companies() {
                         className="accent-[#1100ff]"
                       />
                       <span className="flex-1">{s.name}</span>
-                      <span className="text-xs text-text-muted">{s.signer_name}</span>
                       {!!editing.shareholder_ids.includes(s.id) && (
                         <span className="flex items-center gap-1 text-xs text-text-muted">
                           <input
@@ -250,6 +249,8 @@ export default function Companies() {
                           %
                         </span>
                       )}
+                      {/* Name immer ganz rechts an fester Position */}
+                      <span className="w-32 text-right text-xs text-text-muted truncate">{s.signer_name}</span>
                     </label>
                   ))}
                 </div>
