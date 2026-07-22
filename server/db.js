@@ -120,6 +120,8 @@ try {
 for (const ddl of [
   'ALTER TABLE companies ADD COLUMN position INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE shareholders ADD COLUMN position INTEGER NOT NULL DEFAULT 0',
+  // Beteiligungsquote in Prozent je Gesellschaft+Gesellschafter (NULL = nicht erfasst)
+  'ALTER TABLE company_shareholders ADD COLUMN shares REAL',
 ]) {
   try {
     db.exec(ddl)

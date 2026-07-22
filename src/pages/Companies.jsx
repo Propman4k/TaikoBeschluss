@@ -3,7 +3,7 @@ import { Plus, Pencil, Trash2, Building2, GripVertical } from 'lucide-react'
 import { api } from '../api.js'
 import { useToast } from '../components/Toast.jsx'
 
-const EMPTY = { name: '', legal_form: 'gmbh', registry_court: '', hrb: '', address: '', zip: '', city: '', shareholder_ids: [] }
+const EMPTY = { name: '', legal_form: 'gmbh', registry_court: '', hrb: '', address: '', zip: '', city: '', shareholder_ids: [], sharesById: {} }
 
 const LEGAL_FORMS = [
   { v: 'gmbh', label: 'GmbH' },
@@ -29,8 +29,16 @@ export default function Companies() {
   async function save(e) {
     e.preventDefault()
     try {
-      if (editing.id) await api.put(`/api/companies/${editing.id}`, editing)
-      else await api.post('/api/companies', editing)
+      const payload = {
+        ...editing,
+        // Komma-Dezimaltrennzeichen tolerieren ("33,3" -> 33.3)
+        shareholders: editing.shareholder_ids.map((id) => ({
+          id,
+          shares: String(editing.sharesById[id] ?? '').replace(',', '.'),
+        })),
+      }
+      if (editing.id) await api.put(`/api/companies/${editing.id}`, payload)
+      else await api.post('/api/companies', payload)
       setEditing(null)
       load()
       toast('Gespeichert')
@@ -136,7 +144,13 @@ export default function Companies() {
                 )}
               </div>
               <button
-                onClick={() => setEditing({ ...c, shareholder_ids: c.shareholders.map((s) => s.id) })}
+                onClick={() =>
+                  setEditing({
+                    ...c,
+                    shareholder_ids: c.shareholders.map((s) => s.id),
+                    sharesById: Object.fromEntries(c.shareholders.map((s) => [s.id, s.shares ?? ''])),
+                  })
+                }
                 className="p-2 rounded-[6px] text-slate-500 hover:bg-slate-100 cursor-pointer self-center"
                 aria-label="Bearbeiten"
               >
@@ -152,7 +166,7 @@ export default function Companies() {
 
       {!!editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
-          <form onSubmit={save} className="bg-surface rounded-2xl overflow-hidden shadow-elevated animate-modal-in border border-border w-full max-w-lg my-8">
+          <form onSubmit={save} className="bg-surface rounded-2xl overflow-hidden shadow-elevated animate-modal-in border border-border w-full max-w-xl my-8">
             <div className="px-6 py-4 border-b border-border bg-slate-50 font-semibold">
               {editing.id ? 'Gesellschaft bearbeiten' : 'Neue Gesellschaft'}
             </div>
@@ -209,7 +223,8 @@ export default function Companies() {
                       Noch keine Gesellschafter — zuerst unter „Gesellschafter" anlegen.
                     </div>
                   )}
-                  {shareholders.map((s) => (
+                  {/* Reihenfolge wie auf der Gesellschafter-Seite: Gesellschaften, dann Personen */}
+                  {[...shareholders.filter((s) => s.type !== 'person'), ...shareholders.filter((s) => s.type === 'person')].map((s) => (
                     <label key={s.id} className="flex items-center gap-2.5 px-3 py-2 rounded-[6px] border border-border hover:bg-slate-50 cursor-pointer">
                       <input
                         type="checkbox"
@@ -219,6 +234,22 @@ export default function Companies() {
                       />
                       <span className="flex-1">{s.name}</span>
                       <span className="text-xs text-text-muted">{s.signer_name}</span>
+                      {!!editing.shareholder_ids.includes(s.id) && (
+                        <span className="flex items-center gap-1 text-xs text-text-muted">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="Anteil"
+                            value={editing.sharesById[s.id] ?? ''}
+                            onClick={(e) => e.preventDefault()}
+                            onChange={(e) =>
+                              setEditing({ ...editing, sharesById: { ...editing.sharesById, [s.id]: e.target.value } })
+                            }
+                            className="input-base !w-20 !py-1 text-right"
+                          />
+                          %
+                        </span>
+                      )}
                     </label>
                   ))}
                 </div>

@@ -7,7 +7,7 @@ const withShareholders = (company) => ({
   ...company,
   shareholders: db
     .prepare(
-      `SELECT s.id, s.name, s.signer_name, s.signer_email,
+      `SELECT s.id, s.name, s.signer_name, s.signer_email, cs.shares,
               (s.default_signature_path IS NOT NULL) AS has_default_signature
        FROM shareholders s
        JOIN company_shareholders cs ON cs.shareholder_id = s.id
@@ -41,16 +41,25 @@ function validate(body) {
     address: String(body.address ?? '').trim(),
     zip: String(body.zip ?? '').trim(),
     city: String(body.city ?? '').trim(),
-    shareholderIds: Array.isArray(body.shareholder_ids) ? body.shareholder_ids.map(Number) : [],
+    // Bevorzugt [{id, shares}], Fallback shareholder_ids (Bestandsclients/Tests)
+    shareholderEntries: Array.isArray(body.shareholders)
+      ? body.shareholders.map((x) => ({
+          id: Number(x.id),
+          shares: x.shares == null || x.shares === '' || Number.isNaN(Number(x.shares)) ? null : Number(x.shares),
+        }))
+      : (Array.isArray(body.shareholder_ids) ? body.shareholder_ids : []).map((id) => ({
+          id: Number(id),
+          shares: null,
+        })),
   }
 }
 
-const setShareholders = db.transaction((companyId, ids) => {
+const setShareholders = db.transaction((companyId, entries) => {
   db.prepare('DELETE FROM company_shareholders WHERE company_id = ?').run(companyId)
   const insert = db.prepare(
-    'INSERT INTO company_shareholders (company_id, shareholder_id, position) VALUES (?, ?, ?)',
+    'INSERT INTO company_shareholders (company_id, shareholder_id, position, shares) VALUES (?, ?, ?, ?)',
   )
-  ids.forEach((sid, i) => insert.run(companyId, sid, i))
+  entries.forEach((e, i) => insert.run(companyId, e.id, i, e.shares))
 })
 
 companiesRouter.post('/', (req, res) => {
@@ -61,7 +70,7 @@ companiesRouter.post('/', (req, res) => {
       'INSERT INTO companies (name, legal_form, registry_court, hrb, address, zip, city) VALUES (?, ?, ?, ?, ?, ?, ?)',
     )
     .run(v.name, v.legal_form, v.registry_court, v.hrb, v.address, v.zip, v.city)
-  setShareholders(info.lastInsertRowid, v.shareholderIds)
+  setShareholders(info.lastInsertRowid, v.shareholderEntries)
   res
     .status(201)
     .json(withShareholders(db.prepare('SELECT * FROM companies WHERE id = ?').get(info.lastInsertRowid)))
@@ -76,7 +85,7 @@ companiesRouter.put('/:id', (req, res) => {
     )
     .run(v.name, v.legal_form, v.registry_court, v.hrb, v.address, v.zip, v.city, req.params.id)
   if (!info.changes) return res.status(404).json({ error: 'nicht gefunden' })
-  setShareholders(Number(req.params.id), v.shareholderIds)
+  setShareholders(Number(req.params.id), v.shareholderEntries)
   res.json(withShareholders(db.prepare('SELECT * FROM companies WHERE id = ?').get(req.params.id)))
 })
 

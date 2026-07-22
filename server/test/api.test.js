@@ -219,6 +219,36 @@ describe('TaikoBeschluss API', () => {
     expect((await request(app).post('/api/companies/reorder').send({ ids: [] })).status).toBe(400)
   })
 
+  it('Anteile (shares) je Gesellschafter werden gespeichert und ausgeliefert', async () => {
+    const sh1 = await request(app)
+      .post('/api/shareholders')
+      .send({ name: 'Anteil A GmbH', signer_name: 'A', signer_email: 'aa@example.com' })
+    const sh2 = await request(app)
+      .post('/api/shareholders')
+      .send({ name: 'Anteil B GmbH', signer_name: 'B', signer_email: 'bb@example.com' })
+    const co = await request(app)
+      .post('/api/companies')
+      .send({
+        name: 'Anteilstest GmbH',
+        shareholders: [
+          { id: sh1.body.id, shares: 60 },
+          { id: sh2.body.id, shares: '40' },
+        ],
+      })
+    expect(co.status).toBe(201)
+    expect(co.body.shareholders.map((s) => s.shares)).toEqual([60, 40])
+
+    // Leere/ungueltige Angabe -> NULL; alte shareholder_ids-Form bleibt nutzbar
+    const upd = await request(app)
+      .put(`/api/companies/${co.body.id}`)
+      .send({ name: 'Anteilstest GmbH', shareholders: [{ id: sh1.body.id, shares: '' }] })
+    expect(upd.body.shareholders[0].shares).toBe(null)
+    const legacy = await request(app)
+      .put(`/api/companies/${co.body.id}`)
+      .send({ name: 'Anteilstest GmbH', shareholder_ids: [sh2.body.id] })
+    expect(legacy.body.shareholders.map((s) => s.id)).toEqual([sh2.body.id])
+  })
+
   it('Gesellschafter: manuelle Reihenfolge per Reorder', async () => {
     const a = await request(app)
       .post('/api/shareholders')
