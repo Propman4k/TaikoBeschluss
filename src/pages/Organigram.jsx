@@ -62,39 +62,52 @@ export default function Organigram() {
 
       <div ref={containerRef} className="relative overflow-x-auto py-2">
         <svg className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden>
-          {lines.map((l, i) => {
-            const midY = (l.y1 + l.y2) / 2
-            const label = l.shares != null ? fmtShares(l.shares) : null
-            const labelX = (l.x1 + l.x2) / 2
-            const labelW = label ? label.length * 6.5 + 14 : 0
+          {(() => {
+            // Kanten zwischen denselben Ebenen auf eigene horizontale Spuren
+            // verteilen, damit Linien und Labels sich nicht ueberlagern.
+            const groups = new Map()
+            for (const l of lines) {
+              const key = `${Math.round(l.y1)}:${Math.round(l.y2)}`
+              if (!groups.has(key)) groups.set(key, [])
+              groups.get(key).push(l)
+            }
+            const withRail = []
+            for (const group of groups.values()) {
+              group.sort((a, b) => (a.x1 + a.x2) / 2 - (b.x1 + b.x2) / 2)
+              group.forEach((l, idx) => {
+                const midY = (l.y1 + l.y2) / 2 + (idx - (group.length - 1) / 2) * 18
+                withRail.push({ ...l, midY })
+              })
+            }
             return (
-              <g key={i}>
-                {/* Winkel-Linie (senkrecht/waagerecht) wie im klassischen Organigramm */}
-                <path
-                  d={`M ${l.x1} ${l.y1} L ${l.x1} ${midY} L ${l.x2} ${midY} L ${l.x2} ${l.y2}`}
-                  fill="none"
-                  stroke="#94a3b8"
-                  strokeWidth="1.5"
-                />
-                {!!label && (
-                  <>
-                    <rect
-                      x={labelX - labelW / 2}
-                      y={midY - 10}
-                      width={labelW}
-                      height={20}
-                      rx="5"
-                      fill="white"
-                      stroke="#e2e8f0"
-                    />
-                    <text x={labelX} y={midY + 4} textAnchor="middle" fontSize="11" fontWeight="600" fill="#475569">
-                      {label}
-                    </text>
-                  </>
-                )}
-              </g>
+              <>
+                {withRail.map((l, i) => (
+                  <path
+                    key={i}
+                    d={`M ${l.x1} ${l.y1} L ${l.x1} ${l.midY} L ${l.x2} ${l.midY} L ${l.x2} ${l.y2}`}
+                    fill="none"
+                    stroke="#94a3b8"
+                    strokeWidth="1.5"
+                  />
+                ))}
+                {/* Labels in eigenem Durchgang, damit sie ueber ALLEN Linien liegen */}
+                {withRail.map((l, i) => {
+                  if (l.shares == null) return null
+                  const label = fmtShares(l.shares)
+                  const labelX = (l.x1 + l.x2) / 2
+                  const labelW = label.length * 6.5 + 14
+                  return (
+                    <g key={`label-${i}`}>
+                      <rect x={labelX - labelW / 2} y={l.midY - 10} width={labelW} height={20} rx="5" fill="white" stroke="#e2e8f0" />
+                      <text x={labelX} y={l.midY + 4} textAnchor="middle" fontSize="11" fontWeight="600" fill="#475569">
+                        {label}
+                      </text>
+                    </g>
+                  )
+                })}
+              </>
             )
-          })}
+          })()}
         </svg>
 
         {layers.map((layer, i) => (
