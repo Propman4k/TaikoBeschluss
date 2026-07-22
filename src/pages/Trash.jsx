@@ -80,7 +80,7 @@ export default function Trash() {
         </div>
       )}
 
-      {purging && (
+      {!!purging && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-surface rounded-2xl overflow-hidden shadow-elevated animate-modal-in border border-border w-full max-w-md">
             <div className="px-6 py-4 border-b border-border bg-slate-50 font-semibold">

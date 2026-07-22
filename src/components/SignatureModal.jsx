@@ -128,7 +128,7 @@ export default function SignatureModal({ onSave, onClose, existingUrl, templateU
               >
                 <Eraser size={14} /> Löschen
               </button>
-              {templateUrl && (
+              {!!templateUrl && (
                 <button
                   onClick={() => drawImageUrl(`${templateUrl}${templateUrl.includes('?') ? '&' : '?'}t=${Date.now()}`)}
                   className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-brand bg-blue-50 border border-brand/30 rounded-[6px] hover:bg-blue-100 transition-colors cursor-pointer"

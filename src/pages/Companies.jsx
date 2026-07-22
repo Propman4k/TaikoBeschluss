@@ -113,7 +113,7 @@ export default function Companies() {
         ))}
       </div>
 
-      {editing && (
+      {!!editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
           <form onSubmit={save} className="bg-surface rounded-2xl overflow-hidden shadow-elevated animate-modal-in border border-border w-full max-w-lg my-8">
             <div className="px-6 py-4 border-b border-border bg-slate-50 font-semibold">

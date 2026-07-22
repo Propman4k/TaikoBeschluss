@@ -40,7 +40,7 @@ function Row({ r, onDelete }) {
           <StatusBadge r={r} />
         </div>
       </a>
-      {onDelete && (
+      {!!onDelete && (
         <button
           onClick={() => onDelete(r)}
           className="p-2 rounded-[6px] text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors cursor-pointer"
@@ -92,7 +92,7 @@ function CompanyFilter({ companies, value, onChange }) {
         {current.name}
         <ChevronDown size={15} className={`text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
-      {open && (
+      {!!open && (
         <div className="absolute right-0 top-full mt-1.5 z-20 min-w-full w-max bg-surface rounded-[10px] shadow-elevated border border-border p-1">
           {options.map((o) => (
             <button
@@ -222,7 +222,7 @@ export default function Resolutions({ view = 'offen' }) {
         </>
       )}
 
-      {picking && (
+      {!!picking && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-surface rounded-2xl overflow-hidden shadow-elevated animate-modal-in border border-border w-full max-w-md">
             <div className="px-6 py-4 border-b border-border bg-slate-50 font-semibold">
@@ -260,7 +260,7 @@ export default function Resolutions({ view = 'offen' }) {
       )}
 
       {/* Loeschen: doppelte Abfrage (2 Schritte), Soft-Delete in den Papierkorb */}
-      {deleting && (
+      {!!deleting && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-surface rounded-2xl overflow-hidden shadow-elevated animate-modal-in border border-border w-full max-w-md">
             <div className="px-6 py-4 border-b border-border bg-slate-50 font-semibold">

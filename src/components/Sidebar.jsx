@@ -39,7 +39,7 @@ function BeschluesseGroup({ route, counts }) {
           <ChevronDown size={15} className={`transition-transform ${open ? '' : '-rotate-90'}`} />
         </button>
       </div>
-      {open && (
+      {!!open && (
         <div className="mt-0.5 space-y-0.5">
           {subs.map((s) => {
             const active = route === s.key
@@ -98,7 +98,7 @@ export default function Sidebar({ route, user, counts = {}, mobileOpen, onClose 
       <aside className="hidden md:block w-60 shrink-0 bg-surface border-r border-border sticky top-0 h-screen">
         {nav}
       </aside>
-      {mobileOpen && (
+      {!!mobileOpen && (
         <div className="md:hidden fixed inset-0 z-40">
           <div className="absolute inset-0 bg-slate-900/40" onClick={onClose} />
           <aside className="absolute left-0 top-0 bottom-0 w-64 bg-surface shadow-elevated">{nav}</aside>

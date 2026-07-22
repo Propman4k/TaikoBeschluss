@@ -17,7 +17,7 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={show}>
       {children}
-      {toast && (
+      {!!toast && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[60] animate-toast-in">
           <div
             className={`flex items-center gap-2 text-white px-5 py-3 rounded-[6px] shadow-lg text-sm font-medium ${

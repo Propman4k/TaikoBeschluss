@@ -85,7 +85,7 @@ export default function App() {
             </span>
           </header>
           {editorMatch ? (
-            <Editor id={Number(editorMatch[1])} user={user} />
+            <Editor id={Number(editorMatch[1])} />
           ) : (
             <main className="w-full px-4 sm:px-6 lg:px-10 py-6">
               {route === 'gesellschaften' ? (

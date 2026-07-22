@@ -172,7 +172,7 @@ export default function Shareholders() {
         </div>
       )}
 
-      {editing && (
+      {!!editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <form onSubmit={save} className="bg-surface rounded-2xl overflow-hidden shadow-elevated animate-modal-in border border-border w-full max-w-md">
             <div className="px-6 py-4 border-b border-border bg-slate-50 font-semibold">
@@ -303,7 +303,7 @@ export default function Shareholders() {
       )}
 
       {/* Ausserhalb des Formulars, damit die Modal-Buttons das Formular nicht absenden */}
-      {sigModal && editing?.id && (
+      {!!sigModal && !!editing?.id && (
         <SignatureModal
           existingUrl={editing.has_default_signature ? `/api/shareholders/${editing.id}/signature?t=${sigV}` : null}
           onClose={() => setSigModal(false)}

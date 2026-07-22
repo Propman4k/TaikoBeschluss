@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 3009
+    },
+    {
+      "name": "taiko-beschluss-client-alt",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--port", "3019", "--strictPort"],
+      "port": 3019
     }
   ]
 }
