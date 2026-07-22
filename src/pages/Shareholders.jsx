@@ -133,8 +133,12 @@ export default function Shareholders() {
     }
   }
 
-  const Item = ({ s }) => (
+  // Render-Funktion statt Komponente: eine Inline-Komponente wuerde bei jedem
+  // Re-Render als neuer Typ gelten, React baut die DOM-Knoten neu auf und der
+  // Browser bricht das native Drag & Drop sofort ab.
+  const renderItem = (s) => (
     <div
+      key={s.id}
       draggable
       onDragStart={() => setDragShId(s.id)}
       onDragOver={(e) => rowDragOver(e, s)}
@@ -188,11 +192,7 @@ export default function Shareholders() {
           <h2 className="flex items-center gap-2 text-sm font-semibold text-text-muted mb-2">
             <Building2 size={15} /> Gesellschaften
           </h2>
-          <div className="space-y-2">
-            {companies.map((s) => (
-              <Item key={s.id} s={s} />
-            ))}
-          </div>
+          <div className="space-y-2">{companies.map(renderItem)}</div>
         </div>
       )}
 
@@ -201,11 +201,7 @@ export default function Shareholders() {
           <h2 className="flex items-center gap-2 text-sm font-semibold text-text-muted mb-2">
             <User size={15} /> Personen
           </h2>
-          <div className="space-y-2">
-            {persons.map((s) => (
-              <Item key={s.id} s={s} />
-            ))}
-          </div>
+          <div className="space-y-2">{persons.map(renderItem)}</div>
         </div>
       )}
 
