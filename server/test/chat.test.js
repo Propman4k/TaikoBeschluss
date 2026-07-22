@@ -1,0 +1,121 @@
+// Chat-Endpoint mit gemocktem LLM: writeContent-Semantik, Retry, Fehlerpfad.
+// Kritischster Backend-Pfad — ein Bug hier ueberschreibt Beschlusstexte.
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import express from 'express'
+import request from 'supertest'
+
+vi.mock('../services/ai.js', () => ({
+  chatCompletionWithFallback: vi.fn(),
+}))
+const { chatCompletionWithFallback } = await import('../services/ai.js')
+const { db } = await import('../db.js')
+const { resolutionsRouter } = await import('../routes/resolutions.js')
+const { shareholdersRouter } = await import('../routes/shareholders.js')
+const { companiesRouter } = await import('../routes/companies.js')
+
+db.prepare(`INSERT OR IGNORE INTO users (id, email, name) VALUES (1, 'mf@taikonauten.com', 'Maik')`).run()
+
+const app = express()
+app.use(express.json())
+app.use((req, _res, next) => {
+  req.user = { id: 1, email: 'mf@taikonauten.com', name: 'Maik' }
+  next()
+})
+app.use('/api/shareholders', shareholdersRouter)
+app.use('/api/companies', companiesRouter)
+app.use('/api/resolutions', resolutionsRouter)
+
+async function freshResolution() {
+  const sh = await request(app)
+    .post('/api/shareholders')
+    .send({ name: 'Chat GmbH', signer_name: 'Carla Chat', signer_email: 'cc@example.com' })
+  const co = await request(app)
+    .post('/api/companies')
+    .send({ name: 'Chattest GmbH', shareholder_ids: [sh.body.id] })
+  const r = await request(app).post('/api/resolutions').send({ company_id: co.body.id })
+  return r.body
+}
+
+const llmReply = (obj) => JSON.stringify(obj)
+
+beforeEach(() => {
+  chatCompletionWithFallback.mockReset()
+})
+
+describe('POST /api/resolutions/:id/chat', () => {
+  it('writeContent=true schreibt content und title', async () => {
+    const r = await freshResolution()
+    chatCompletionWithFallback.mockResolvedValue(
+      llmReply({ reply: 'Beschluss formuliert.', writeContent: true, content: '1. Testpunkt.', title: 'Testbeschluss' }),
+    )
+    const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'Formuliere.' })
+    expect(res.status).toBe(200)
+    expect(res.body.wrote).toBe(true)
+    expect(res.body.resolution.content).toBe('1. Testpunkt.')
+    expect(res.body.resolution.title).toBe('Testbeschluss')
+    const msgs = db.prepare('SELECT role, wrote FROM chat_messages WHERE resolution_id = ? ORDER BY id').all(r.id)
+    expect(msgs).toEqual([
+      { role: 'user', wrote: 0 },
+      { role: 'assistant', wrote: 1 },
+    ])
+  })
+
+  it('writeContent=false laesst das Dokument unveraendert (Rueckfrage)', async () => {
+    const r = await freshResolution()
+    await request(app).patch(`/api/resolutions/${r.id}`).send({ content: 'Bestand.', title: 'Alt' })
+    chatCompletionWithFallback.mockResolvedValue(
+      llmReply({ reply: 'Frage 1: Wie hoch?', writeContent: false, content: '', title: '' }),
+    )
+    const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'Gewinn ausschuetten' })
+    expect(res.body.wrote).toBe(false)
+    expect(res.body.resolution.content).toBe('Bestand.')
+    expect(res.body.resolution.title).toBe('Alt')
+  })
+
+  it('writeContent=true mit leerem content leert den Beschluss bewusst', async () => {
+    const r = await freshResolution()
+    await request(app).patch(`/api/resolutions/${r.id}`).send({ content: 'Wegwerfen.' })
+    chatCompletionWithFallback.mockResolvedValue(
+      llmReply({ reply: 'Geleert.', writeContent: true, content: '', title: '' }),
+    )
+    const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'fang neu an' })
+    expect(res.body.wrote).toBe(true)
+    expect(res.body.resolution.content).toBe('')
+  })
+
+  it('ungueltiges JSON wird bis zu 3x wiederholt, dann Erfolg', async () => {
+    const r = await freshResolution()
+    chatCompletionWithFallback
+      .mockResolvedValueOnce('kein json')
+      .mockResolvedValueOnce(llmReply({ reply: 'ok', writeContent: false, content: '', title: '' }))
+    const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'hi' })
+    expect(res.status).toBe(200)
+    expect(chatCompletionWithFallback).toHaveBeenCalledTimes(2)
+  })
+
+  it('LLM dauerhaft kaputt -> 502, User-Nachricht bleibt persistiert', async () => {
+    const r = await freshResolution()
+    chatCompletionWithFallback.mockRejectedValue(new Error('boom'))
+    const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'hallo' })
+    expect(res.status).toBe(502)
+    expect(chatCompletionWithFallback).toHaveBeenCalledTimes(3)
+    const msgs = db.prepare('SELECT role FROM chat_messages WHERE resolution_id = ?').all(r.id)
+    expect(msgs).toEqual([{ role: 'user' }])
+  })
+
+  it('leere Nachricht -> 400, kein LLM-Call', async () => {
+    const r = await freshResolution()
+    const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: '   ' })
+    expect(res.status).toBe(400)
+    expect(chatCompletionWithFallback).not.toHaveBeenCalled()
+  })
+
+  it('doppelt-escapte Umbrueche im content werden normalisiert', async () => {
+    const r = await freshResolution()
+    chatCompletionWithFallback.mockResolvedValue(
+      llmReply({ reply: 'ok', writeContent: true, content: '1. Eins.\\n\\n2. Zwei.', title: '' }),
+    )
+    const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'schreib' })
+    expect(res.body.resolution.content).toBe('1. Eins.\n\n2. Zwei.')
+  })
+})

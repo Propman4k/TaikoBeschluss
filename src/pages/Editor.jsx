@@ -1,37 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Send, FileDown, PenLine, Check, Pencil, Loader2 } from 'lucide-react'
 import { api, fmtDate } from '../api.js'
 import { useToast } from '../components/Toast.jsx'
 import SignatureModal from '../components/SignatureModal.jsx'
-
-// A4 bei 96dpi (210x297mm), Rand ~24mm — entspricht dem PDF-Layout.
-const PAGE = { w: 794, h: 1123, pad: 90 }
-const CONTENT_H = PAGE.h - 2 * PAGE.pad
-
-// Misst alle Bloecke in einem unsichtbaren Container und verteilt sie auf
-// A4-Seiten. Ein Block, der allein hoeher als eine Seite ist, bekommt eine
-// eigene Seite (und darf ueberlaufen).
-function usePagination(blocks, deps) {
-  const measureRef = useRef(null)
-  const [pages, setPages] = useState([blocks.map((b) => b.id)])
-  useLayoutEffect(() => {
-    const el = measureRef.current
-    if (!el) return
-    const acc = [[]]
-    let h = 0
-    for (const child of el.children) {
-      const bh = child.offsetHeight
-      if (h + bh > CONTENT_H && acc.at(-1).length) {
-        acc.push([])
-        h = 0
-      }
-      acc.at(-1).push(child.dataset.block)
-      h += bh
-    }
-    setPages(acc)
-  }, deps) // eslint-disable-line react-hooks/exhaustive-deps
-  return { measureRef, pages }
-}
+import { PAGE, usePagination } from '../usePagination.js'
 
 export default function Editor({ id }) {
   const [r, setR] = useState(null)

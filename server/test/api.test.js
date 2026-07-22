@@ -153,6 +153,8 @@ describe('TaikoBeschluss API', () => {
     await request(app).patch(`/api/resolutions/${r.body.id}`).send({ content: 'Inhalt.' })
 
     await request(app).delete(`/api/resolutions/${r.body.id}`)
+    const trash = await request(app).get('/api/resolutions/trash')
+    expect(trash.body.map((t) => t.id)).toContain(r.body.id)
     expect((await request(app).patch(`/api/resolutions/${r.body.id}`).send({ title: 'x' })).status).toBe(404)
     expect((await request(app).post(`/api/resolutions/${r.body.id}/release`)).status).toBe(404)
     expect((await request(app).get(`/api/resolutions/${r.body.id}/pdf`)).status).toBe(404)
@@ -160,6 +162,51 @@ describe('TaikoBeschluss API', () => {
     // Nach Wiederherstellen geht alles wieder
     await request(app).post(`/api/resolutions/${r.body.id}/restore`)
     expect((await request(app).post(`/api/resolutions/${r.body.id}/release`)).status).toBe(200)
+  })
+
+  it('Gesellschafter/Gesellschaften: PUT, DELETE und Konflikt-Guards', async () => {
+    const sh = await request(app)
+      .post('/api/shareholders')
+      .send({ name: 'Crud GmbH', signer_name: 'Carl Crud', signer_email: 'crud@example.com' })
+    const co = await request(app)
+      .post('/api/companies')
+      .send({ name: 'Crudtest GmbH', legal_form: 'ug', shareholder_ids: [sh.body.id] })
+
+    // PUT Gesellschafter (Person: signer_name folgt name), ungueltig -> 400, unbekannt -> 404
+    const upd = await request(app)
+      .put(`/api/shareholders/${sh.body.id}`)
+      .send({ name: 'Carla Crud', type: 'person', signer_email: 'crud@example.com' })
+    expect(upd.status).toBe(200)
+    expect(upd.body.signer_name).toBe('Carla Crud')
+    expect((await request(app).put(`/api/shareholders/${sh.body.id}`).send({ name: '' })).status).toBe(400)
+    expect(
+      (await request(app).put('/api/shareholders/99999').send({ name: 'X', signer_name: 'X', signer_email: 'x@x.de' }))
+        .status,
+    ).toBe(404)
+
+    // Zugeordneter Gesellschafter nicht loeschbar
+    expect((await request(app).delete(`/api/shareholders/${sh.body.id}`)).status).toBe(409)
+
+    // PUT Gesellschaft: Rechtsform + Gesellschafter-Liste austauschbar
+    const sh2 = await request(app)
+      .post('/api/shareholders')
+      .send({ name: 'Neu GmbH', signer_name: 'Nora Neu', signer_email: 'neu@example.com' })
+    const updCo = await request(app)
+      .put(`/api/companies/${co.body.id}`)
+      .send({ name: 'Crudtest UG', legal_form: 'kaputt', shareholder_ids: [sh2.body.id] })
+    expect(updCo.status).toBe(200)
+    expect(updCo.body.legal_form).toBe('gmbh') // unbekannte Rechtsform -> Default
+    expect(updCo.body.shareholders.map((s) => s.id)).toEqual([sh2.body.id])
+    expect((await request(app).put('/api/companies/99999').send({ name: 'X' })).status).toBe(404)
+
+    // Gesellschaft mit Beschluss nicht loeschbar; ohne -> 204
+    await request(app).post('/api/resolutions').send({ company_id: co.body.id })
+    expect((await request(app).delete(`/api/companies/${co.body.id}`)).status).toBe(409)
+    const co2 = await request(app).post('/api/companies').send({ name: 'Leer GmbH', shareholder_ids: [] })
+    expect((await request(app).delete(`/api/companies/${co2.body.id}`)).status).toBe(204)
+
+    // Nicht mehr zugeordneter Gesellschafter loeschbar
+    expect((await request(app).delete(`/api/shareholders/${sh.body.id}`)).status).toBe(204)
   })
 
   it('Standard-Unterschrift: kein PNG -> 400', async () => {

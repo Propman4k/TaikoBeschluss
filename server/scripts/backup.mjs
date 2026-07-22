@@ -64,7 +64,8 @@ for (const dir of [BACKUP_ROOT, OFFSITE_DIR]) {
 }
 
 // ── Snapshot ──
-const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+// inkl. Millisekunden — zwei Laeufe in derselben Sekunde duerfen nicht kollidieren
+const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 23)
 const dest = path.join(BACKUP_ROOT, stamp)
 fs.mkdirSync(dest, { recursive: true })
 
@@ -105,7 +106,7 @@ if (fs.existsSync(sigSrc)) {
 function applyRetention(root) {
   const snapDirs = fs
     .readdirSync(root)
-    .filter((f) => /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$/.test(f))
+    .filter((f) => /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(-\d{3})?$/.test(f))
     .sort()
     .reverse()
   for (const old of snapDirs.slice(KEEP)) {

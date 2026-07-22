@@ -14,5 +14,9 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.{js,jsx}', 'server/**/*.test.{js,jsx}'],
     setupFiles: ['./server/test/setup.js'],
+    coverage: {
+      // Ratchet: knapp unter Ist-Stand — darf nur steigen, nie sinken
+      thresholds: { lines: 90, branches: 68 },
+    },
   },
 })

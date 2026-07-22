@@ -1,5 +1,17 @@
 # Testing-Strategie Audit — TaikoBeschluss — 2026-07-22
 
+> **Nachtrag 2026-07-23 — Maßnahmen umgesetzt, Re-Score: 8,5/10.**
+> Alle 6 empfohlenen Schritte erledigt: GitHub-Actions-CI (lint + coverage-gated
+> Tests + Build), Chat-Endpoint-Tests mit LLM-Mock (7), ai.js-Tests via fetch-Stub (6),
+> auth.js-Tests (6), Backup-Restore-Drill inkl. Retention (4, fand einen echten Bug:
+> Sekunden-Timestamp-Kollision), usePagination extrahiert + getestet (6) und
+> api.js-Wrapper-Tests (5), CRUD-Lücken companies/shareholders geschlossen.
+> **Stand jetzt: 48 Tests, Coverage 93,9 % Lines / 73,0 % Branches, Ratchet 90/68
+> in vite.config.js, CI als Merge-Gate.** Neue Scorecard: CI 9, Coverage BE 9,
+> Coverage FE 7 (Pages bewusst ohne Komponenten-Tests), Mock-Strategie 9,
+> Guardrails 9. Verbleibende bewusste Lücken: OAuth-Callback/index.js (mockt man
+> sich kaputt), Page-Komponenten (Grenznutzen), E2E (internes Tool).
+
 ## Executive Summary
 
 **Score: 5/10.** Backend solide angetestet (13/13 grün, 68,7 % Lines via echter
