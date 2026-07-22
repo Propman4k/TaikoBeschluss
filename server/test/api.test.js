@@ -142,6 +142,26 @@ describe('TaikoBeschluss API', () => {
     expect(badSign.status).toBe(400)
   })
 
+  it('Papierkorb: keine Bearbeitung/Freigabe/PDF fuer geloeschte Beschluesse', async () => {
+    const sh = await request(app)
+      .post('/api/shareholders')
+      .send({ name: 'Trash GmbH', signer_name: 'Toni Trash', signer_email: 'tt@example.com' })
+    const co = await request(app)
+      .post('/api/companies')
+      .send({ name: 'Trashtest GmbH', shareholder_ids: [sh.body.id] })
+    const r = await request(app).post('/api/resolutions').send({ company_id: co.body.id })
+    await request(app).patch(`/api/resolutions/${r.body.id}`).send({ content: 'Inhalt.' })
+
+    await request(app).delete(`/api/resolutions/${r.body.id}`)
+    expect((await request(app).patch(`/api/resolutions/${r.body.id}`).send({ title: 'x' })).status).toBe(404)
+    expect((await request(app).post(`/api/resolutions/${r.body.id}/release`)).status).toBe(404)
+    expect((await request(app).get(`/api/resolutions/${r.body.id}/pdf`)).status).toBe(404)
+
+    // Nach Wiederherstellen geht alles wieder
+    await request(app).post(`/api/resolutions/${r.body.id}/restore`)
+    expect((await request(app).post(`/api/resolutions/${r.body.id}/release`)).status).toBe(200)
+  })
+
   it('Standard-Unterschrift: kein PNG -> 400', async () => {
     const sh = await request(app)
       .post('/api/shareholders')

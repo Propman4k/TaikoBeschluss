@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import rateLimit from 'express-rate-limit'
 import path from 'node:path'
 import fs from 'node:fs'
 import { db, SIGNATURES_DIR } from '../db.js'
@@ -10,6 +11,9 @@ import { isPng } from '../services/png.js'
 export const resolutionsRouter = Router()
 
 const companyOf = (r) => db.prepare('SELECT * FROM companies WHERE id = ?').get(r.company_id)
+// Fuer schreibende Aktionen + PDF: Papierkorb-Beschluesse sind tabu (erst wiederherstellen)
+const activeResolution = (id) =>
+  db.prepare('SELECT * FROM resolutions WHERE id = ? AND deleted_at IS NULL').get(id)
 const shareholdersOf = (companyId) =>
   db
     .prepare(
@@ -119,7 +123,7 @@ resolutionsRouter.get('/:id', (req, res) => {
 // Titel, Inhalt, Datum aenderbar — auch nach Freigabe/Unterschrift
 // (bewusste Entscheidung: bestehende Unterschriften bleiben erhalten).
 resolutionsRouter.patch('/:id', (req, res) => {
-  const r = db.prepare('SELECT * FROM resolutions WHERE id = ?').get(req.params.id)
+  const r = activeResolution(req.params.id)
   if (!r) return res.status(404).json({ error: 'nicht gefunden' })
   const title = req.body.title !== undefined ? String(req.body.title) : r.title
   const content = req.body.content !== undefined ? String(req.body.content) : r.content
@@ -172,7 +176,7 @@ resolutionsRouter.delete('/:id/permanent', (req, res) => {
 
 // ── Freigabe: legt je Gesellschafter eine offene Unterschriftszeile an ──
 resolutionsRouter.post('/:id/release', (req, res) => {
-  const r = db.prepare('SELECT * FROM resolutions WHERE id = ?').get(req.params.id)
+  const r = activeResolution(req.params.id)
   if (!r) return res.status(404).json({ error: 'nicht gefunden' })
   if (!r.content.trim()) return res.status(400).json({ error: 'Beschluss hat noch keinen Inhalt' })
   const insert = db.prepare(
@@ -189,6 +193,7 @@ resolutionsRouter.post('/:id/release', (req, res) => {
 // ── Unterschreiben: PNG-Body. Jeder eingeloggte Nutzer darf fuer jeden
 // Gesellschafter unterschreiben; signed_by protokolliert, wer es war. ──
 resolutionsRouter.post('/:id/sign/:shareholderId', (req, res) => {
+  if (!activeResolution(req.params.id)) return res.status(404).json({ error: 'nicht gefunden' })
   const row = db
     .prepare('SELECT id, signature_path FROM resolution_signatures WHERE resolution_id = ? AND shareholder_id = ?')
     .get(req.params.id, req.params.shareholderId)
@@ -226,7 +231,7 @@ resolutionsRouter.get('/:id/sign/:shareholderId', (req, res) => {
 
 // ── PDF ──
 resolutionsRouter.get('/:id/pdf', async (req, res) => {
-  const r = db.prepare('SELECT * FROM resolutions WHERE id = ?').get(req.params.id)
+  const r = activeResolution(req.params.id)
   if (!r) return res.status(404).json({ error: 'nicht gefunden' })
   const company = companyOf(r)
   const shareholders = shareholdersOf(r.company_id)
@@ -276,8 +281,11 @@ resolutionsRouter.get('/:id/chat', (req, res) => {
   )
 })
 
-resolutionsRouter.post('/:id/chat', async (req, res) => {
-  const r = db.prepare('SELECT * FROM resolutions WHERE id = ?').get(req.params.id)
+// Kostendeckel: jeder Chat-Turn ist ein LLM-Call
+const chatLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 60 })
+
+resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
+  const r = activeResolution(req.params.id)
   if (!r) return res.status(404).json({ error: 'nicht gefunden' })
   const text = String(req.body.message ?? '').trim()
   if (!text) return res.status(400).json({ error: 'Nachricht fehlt' })

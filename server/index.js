@@ -97,6 +97,7 @@ app.get('/api/auth/google/callback', authLimiter, async (req, res) => {
 if (!PROD && process.env.DEV_LOGIN === '1') {
   app.get('/api/auth/dev', (req, res) => {
     const email = String(req.query.email ?? 'mf@taikonauten.com').toLowerCase()
+    if (!isAllowed(email)) return res.status(403).send('Kein Zugang fuer dieses Konto.')
     db.prepare(
       `INSERT INTO users (email, name) VALUES (?, ?) ON CONFLICT(email) DO NOTHING`,
     ).run(email, email.split('@')[0])
@@ -118,6 +119,13 @@ app.get('/api/health', (_req, res) => res.json({ ok: true }))
 app.use('/api/companies', requireAuth, companiesRouter)
 app.use('/api/shareholders', requireAuth, shareholdersRouter)
 app.use('/api/resolutions', requireAuth, resolutionsRouter)
+
+// Zentrale Fehlerbehandlung: einheitliches JSON statt Express-Default-HTML.
+// Express 5 leitet auch abgelehnte Promises aus async-Handlern hierher.
+app.use('/api', (err, _req, res, _next) => {
+  console.error('unhandled:', err)
+  res.status(500).json({ error: 'Interner Fehler' })
+})
 
 // ── Prod: statisches Frontend ──
 if (PROD) {
