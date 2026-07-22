@@ -7,7 +7,7 @@ const withShareholders = (company) => ({
   ...company,
   shareholders: db
     .prepare(
-      `SELECT s.id, s.name, s.signer_name, s.signer_email, cs.shares,
+      `SELECT s.id, s.name, s.type, s.signer_name, s.signer_email, cs.shares,
               (s.default_signature_path IS NOT NULL) AS has_default_signature
        FROM shareholders s
        JOIN company_shareholders cs ON cs.shareholder_id = s.id

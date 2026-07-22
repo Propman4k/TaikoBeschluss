@@ -6,6 +6,7 @@ import Resolutions from './pages/Resolutions.jsx'
 import Editor from './pages/Editor.jsx'
 import Companies from './pages/Companies.jsx'
 import Shareholders from './pages/Shareholders.jsx'
+import Organigram from './pages/Organigram.jsx'
 import Trash from './pages/Trash.jsx'
 import Sidebar from './components/Sidebar.jsx'
 import { ToastProvider } from './components/Toast.jsx'
@@ -92,6 +93,8 @@ export default function App() {
                 <Companies />
               ) : route === 'gesellschafter' ? (
                 <Shareholders />
+              ) : route === 'organigramm' ? (
+                <Organigram />
               ) : route === 'papierkorb' ? (
                 <Trash />
               ) : route === 'entwuerfe' ? (

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FileSignature, Building2, Users, LogOut, X, ScrollText, ChevronDown } from 'lucide-react'
+import { FileSignature, Building2, Users, LogOut, X, ScrollText, ChevronDown, Network } from 'lucide-react'
 
 const itemBase = 'flex items-center gap-3 px-3 py-2 rounded-[6px] text-sm transition-colors'
 const itemActive = 'bg-blue-50 text-[#0014FF] font-medium'
@@ -82,6 +82,10 @@ export default function Sidebar({ route, user, counts = {}, mobileOpen, onClose 
         <a href="#/gesellschafter" className={`${itemBase} ${route === 'gesellschafter' ? itemActive : itemIdle}`}>
           <Users size={16} strokeWidth={2} />
           <span className="flex-1">Gesellschafter</span>
+        </a>
+        <a href="#/organigramm" className={`${itemBase} ${route === 'organigramm' ? itemActive : itemIdle}`}>
+          <Network size={16} strokeWidth={2} />
+          <span className="flex-1">Organigramm</span>
         </a>
       </div>
       <div className="px-3 py-4 border-t border-border">
