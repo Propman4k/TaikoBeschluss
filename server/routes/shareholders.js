@@ -2,6 +2,7 @@ import { Router } from 'express'
 import path from 'node:path'
 import fs from 'node:fs'
 import { db, SIGNATURES_DIR } from '../db.js'
+import { isPng } from '../services/png.js'
 
 export const shareholdersRouter = Router()
 
@@ -63,6 +64,7 @@ shareholdersRouter.post('/:id/signature', (req, res) => {
   const sh = db.prepare('SELECT id FROM shareholders WHERE id = ?').get(req.params.id)
   if (!sh) return res.status(404).json({ error: 'nicht gefunden' })
   if (!req.body || !req.body.length) return res.status(400).json({ error: 'Kein Bild empfangen' })
+  if (!isPng(req.body)) return res.status(400).json({ error: 'Unterschrift muss ein PNG sein' })
   const file = path.join(SIGNATURES_DIR, `shareholder-${req.params.id}.png`)
   fs.writeFileSync(file, req.body)
   db.prepare('UPDATE shareholders SET default_signature_path = ? WHERE id = ?').run(file, req.params.id)

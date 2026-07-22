@@ -116,6 +116,14 @@ try {
   // Spalte existiert bereits
 }
 
+// Sicherheitsnetz gegen doppelte Beschluss-Nummern je Firma (Vergabe via MAX,
+// der Index faengt Races und Restore-Faelle ab).
+try {
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_resolutions_company_number ON resolutions(company_id, number)')
+} catch (err) {
+  console.warn('UNIQUE-Index auf resolutions(company_id, number) nicht anlegbar:', err.message)
+}
+
 // Rechtsform der Gesellschaft (steuert die rechtlich korrekte Beschluss-Formulierung).
 // Backfill anhand des Namens beim ersten Anlegen der Spalte.
 try {

@@ -105,6 +105,55 @@ describe('TaikoBeschluss API', () => {
     expect(list.body.toSign).toHaveLength(0)
   })
 
+  it('Nummern-Vergabe: keine Wiederverwendung nach endgueltigem Loeschen', async () => {
+    const year = new Date().getFullYear()
+    const sh = await request(app)
+      .post('/api/shareholders')
+      .send({ name: 'Nummern GmbH', signer_name: 'Nina Nummer', signer_email: 'nn@example.com' })
+    const co = await request(app)
+      .post('/api/companies')
+      .send({ name: 'Nummerntest GmbH', shareholder_ids: [sh.body.id] })
+
+    const ids = []
+    for (let i = 1; i <= 3; i++) {
+      const r = await request(app).post('/api/resolutions').send({ company_id: co.body.id })
+      expect(r.body.number).toBe(`${year}-0${i}`)
+      ids.push(r.body.id)
+    }
+
+    // Beschluss 02 in den Papierkorb und endgueltig loeschen
+    await request(app).delete(`/api/resolutions/${ids[1]}`)
+    const perm = await request(app).delete(`/api/resolutions/${ids[1]}/permanent`)
+    expect(perm.status).toBe(204)
+
+    // Naechster Beschluss bekommt 04 — NICHT die schon vergebene 03
+    const next = await request(app).post('/api/resolutions').send({ company_id: co.body.id })
+    expect(next.body.number).toBe(`${year}-04`)
+
+    // Ungueltiges "PNG" beim Unterschreiben -> 400
+    await request(app)
+      .patch(`/api/resolutions/${next.body.id}`)
+      .send({ content: 'Testinhalt.' })
+    await request(app).post(`/api/resolutions/${next.body.id}/release`)
+    const badSign = await request(app)
+      .post(`/api/resolutions/${next.body.id}/sign/${sh.body.id}`)
+      .set('Content-Type', 'image/png')
+      .send(Buffer.from('kein png'))
+    expect(badSign.status).toBe(400)
+  })
+
+  it('Standard-Unterschrift: kein PNG -> 400', async () => {
+    const sh = await request(app)
+      .post('/api/shareholders')
+      .send({ name: 'Fake GmbH', signer_name: 'Falk Fake', signer_email: 'ff@example.com' })
+    const up = await request(app)
+      .post(`/api/shareholders/${sh.body.id}/signature`)
+      .set('Content-Type', 'image/png')
+      .send(Buffer.from('definitiv kein png'))
+    expect(up.status).toBe(400)
+    expect(up.body.has_default_signature).toBeUndefined()
+  })
+
   it('Standard-Unterschrift: hochladen, ausliefern, entfernen; kein FS-Pfad im JSON', async () => {
     const sh = await request(app)
       .post('/api/shareholders')

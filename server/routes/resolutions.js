@@ -5,6 +5,7 @@ import { db, SIGNATURES_DIR } from '../db.js'
 import { buildFrame, normalizeContent } from '../services/beschluss.js'
 import { buildResolutionPdf, readSignatures } from '../services/pdf.js'
 import { chatCompletionWithFallback } from '../services/ai.js'
+import { isPng } from '../services/png.js'
 
 export const resolutionsRouter = Router()
 
@@ -91,12 +92,16 @@ resolutionsRouter.post('/', (req, res) => {
   if (!shareholdersOf(companyId).length)
     return res.status(400).json({ error: 'Gesellschaft hat keine Gesellschafter' })
 
-  // Fortlaufende Nummer je Firma und Jahr: "2026-01"
+  // Fortlaufende Nummer je Firma und Jahr: "2026-01". MAX statt COUNT, damit
+  // nach endgueltigem Loeschen keine bereits vergebene Nummer wiederkehrt.
   const year = new Date().getFullYear()
-  const count = db
-    .prepare(`SELECT COUNT(*) AS n FROM resolutions WHERE company_id = ? AND number LIKE ?`)
-    .get(companyId, `${year}-%`).n
-  const number = `${year}-${String(count + 1).padStart(2, '0')}`
+  const max =
+    db
+      .prepare(
+        `SELECT MAX(CAST(substr(number, 6) AS INTEGER)) AS n FROM resolutions WHERE company_id = ? AND number LIKE ?`,
+      )
+      .get(companyId, `${year}-%`).n ?? 0
+  const number = `${year}-${String(max + 1).padStart(2, '0')}`
   const today = new Date().toISOString().slice(0, 10)
 
   const info = db
@@ -196,6 +201,7 @@ resolutionsRouter.post('/:id/sign/:shareholderId', (req, res) => {
       'UPDATE resolution_signatures SET signature_path = NULL, signed_at = NULL, signed_by = NULL WHERE id = ?',
     ).run(row.id)
   } else {
+    if (!isPng(req.body)) return res.status(400).json({ error: 'Unterschrift muss ein PNG sein' })
     const file = path.join(SIGNATURES_DIR, `res${req.params.id}-sh${req.params.shareholderId}.png`)
     fs.writeFileSync(file, req.body)
     db.prepare(
