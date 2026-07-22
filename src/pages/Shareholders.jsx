@@ -144,7 +144,7 @@ export default function Shareholders() {
       }`}
     >
       <GripVertical size={16} className="text-slate-300 cursor-grab shrink-0" />
-      <div className="p-2 rounded-[8px] bg-emerald-50 text-emerald-600">
+      <div className={`p-2 rounded-[8px] ${s.type === 'person' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-brand'}`}>
         {s.type === 'person' ? <User size={20} /> : <Building2 size={20} />}
       </div>
       <div className="flex-1 min-w-0">
