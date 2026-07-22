@@ -35,6 +35,18 @@ describe('buildGraph', () => {
     expect(layers.flat()).toHaveLength(3) // terminiert trotz Ring A<->B
   })
 
+  it('GbR ohne eigene Beteiligungen liegt UEBER der Personen-Ebene', () => {
+    const { layers } = buildGraph([
+      { name: 'LeFaFa GbR', shareholders: [sh('Maik', 'person', 59), sh('Denise', 'person', 1)] },
+      { name: 'Holding GmbH', shareholders: [sh('Maik', 'person', 100)] },
+      { name: 'Operativ GmbH', shareholders: [sh('Holding GmbH', 'company', 60)] },
+    ])
+    expect(layers[0].map((n) => n.name)).toEqual(['LeFaFa GbR'])
+    expect(layers[1].map((n) => n.name).sort()).toEqual(['Denise', 'Maik'])
+    expect(layers[2].map((n) => n.name)).toEqual(['Holding GmbH'])
+    expect(layers[3].map((n) => n.name)).toEqual(['Operativ GmbH'])
+  })
+
   it('leere Eingabe -> keine Ebenen', () => {
     expect(buildGraph([]).layers).toEqual([])
   })

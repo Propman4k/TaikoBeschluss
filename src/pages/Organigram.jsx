@@ -81,34 +81,38 @@ function computeLayout(layers, edges, dims, containerWidth) {
     }
   })
 
-  // Kanten: alle Eigentuemer eines Ziels teilen sich eine Sammelschiene und
-  // muenden mittig oben ein; Schienen verschiedener Ziele sind versetzt.
+  // Kanten: alle Eigentuemer eines Ziels teilen sich eine Sammelschiene in
+  // der Luecke direkt am Ziel; Schienen verschiedener Ziele sind versetzt.
+  // Ziele koennen auch OBERHALB der Eigentuemer liegen (GbR-Ebene).
   const byTarget = new Map()
   for (const e of edges) {
     if (!pos.has(e.from) || !pos.has(e.to)) continue
     if (!byTarget.has(e.to)) byTarget.set(e.to, [])
     byTarget.get(e.to).push(e)
   }
-  const targetsByY = new Map()
+  const groups = new Map() // Ziel-Ebene + Richtung -> Ziele
   for (const t of byTarget.keys()) {
-    const y = pos.get(t).y
-    if (!targetsByY.has(y)) targetsByY.set(y, [])
-    targetsByY.get(y).push(t)
+    const p = pos.get(t)
+    const down = pos.get(byTarget.get(t)[0].from).y < p.y
+    const key = `${p.y}:${down}`
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(t)
   }
   const lines = []
-  for (const [y, targets] of targetsByY) {
+  for (const targets of groups.values()) {
     targets.sort((a, b) => pos.get(a).x - pos.get(b).x)
     targets.forEach((t, idx) => {
       const p = pos.get(t)
-      const railY = y - GAP_Y / 2 + (idx - (targets.length - 1) / 2) * 18
+      const railOffset = (idx - (targets.length - 1) / 2) * 24
       for (const e of byTarget.get(t)) {
         const f = pos.get(e.from)
+        const down = f.y < p.y
         lines.push({
           x1: f.x + f.w / 2,
-          y1: f.y + f.h,
+          y1: down ? f.y + f.h : f.y,
           x2: p.x + p.w / 2,
-          y2: p.y,
-          railY,
+          y2: down ? p.y : p.y + p.h,
+          railY: down ? p.y - GAP_Y / 2 + railOffset : p.y + p.h + GAP_Y / 2 + railOffset,
           shares: e.shares,
         })
       }
@@ -162,6 +166,11 @@ export default function Organigram() {
         style={{ height: layout?.height }}
       >
         <svg className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden>
+          <defs>
+            <marker id="og-arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+              <path d="M 1.5 1 L 7 4.5 L 1.5 8" fill="none" stroke="#94a3b8" strokeWidth="1.5" />
+            </marker>
+          </defs>
           {(layout?.lines ?? []).map((l, i) => (
             <path
               key={i}
@@ -169,19 +178,19 @@ export default function Organigram() {
               fill="none"
               stroke="#94a3b8"
               strokeWidth="1.5"
+              markerEnd="url(#og-arrow)"
             />
           ))}
-          {/* Labels ueber allen Linien, nahe am Eigentuemer-Abgang */}
+          {/* Labels auf der Abgangs-Linie des Eigentuemers, ueber allen Linien */}
           {(layout?.lines ?? []).map((l, i) => {
             if (l.shares == null) return null
             const label = fmtShares(l.shares)
             const w = label.length * 6.5 + 14
-            const straight = Math.abs(l.x2 - l.x1) < w + 20
-            const labelX = straight ? l.x1 : l.x1 + Math.sign(l.x2 - l.x1) * (w / 2 + 16)
+            const labelY = (l.y1 + l.railY) / 2
             return (
               <g key={`label-${i}`}>
-                <rect x={labelX - w / 2} y={l.railY - 10} width={w} height={20} rx="5" fill="white" stroke="#e2e8f0" />
-                <text x={labelX} y={l.railY + 4} textAnchor="middle" fontSize="11" fontWeight="600" fill="#475569">
+                <rect x={l.x1 - w / 2} y={labelY - 10} width={w} height={20} rx="5" fill="white" stroke="#e2e8f0" />
+                <text x={l.x1} y={labelY + 4} textAnchor="middle" fontSize="11" fontWeight="600" fill="#475569">
                   {label}
                 </text>
               </g>
