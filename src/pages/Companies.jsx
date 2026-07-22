@@ -225,7 +225,8 @@ export default function Companies() {
                   )}
                   {/* Reihenfolge wie auf der Gesellschafter-Seite: Gesellschaften, dann Personen */}
                   {[...shareholders.filter((s) => s.type !== 'person'), ...shareholders.filter((s) => s.type === 'person')].map((s) => (
-                    <label key={s.id} className="flex items-center gap-2.5 px-3 py-2 rounded-[6px] border border-border hover:bg-slate-50 cursor-pointer">
+                    // feste Hoehe: Zeile springt nicht, wenn das Anteil-Feld erscheint
+                    <label key={s.id} className="flex items-center gap-2.5 px-3 h-11 rounded-[6px] border border-border hover:bg-slate-50 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={editing.shareholder_ids.includes(s.id)}
