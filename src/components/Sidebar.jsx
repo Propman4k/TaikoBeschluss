@@ -27,10 +27,14 @@ function BeschluesseGroup({ route, counts }) {
   return (
     <div>
       <div className={`${itemBase} !pr-1 ${groupActive ? headerActive : headerIdle}`}>
-        <a href="#/" className="flex items-center gap-3 flex-1 min-w-0">
+        {/* Klick auf den Gruppen-Namen klappt ein/aus (kein Navigations-Link) */}
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer text-left"
+        >
           <ScrollText size={16} strokeWidth={2} />
           <span className="truncate">Beschlüsse</span>
-        </a>
+        </button>
         <button
           onClick={() => setOpen((o) => !o)}
           aria-label={open ? 'Einklappen' : 'Aufklappen'}

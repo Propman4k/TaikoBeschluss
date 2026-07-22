@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Building2, User } from 'lucide-react'
-import { api } from '../api.js'
+import { api, isPersonengesellschaft } from '../api.js'
 import { buildGraph } from '../organigram.js'
 
 const GAP_X = 40 // Mindestabstand zwischen Knoten einer Ebene
@@ -208,7 +208,15 @@ export default function Organigram() {
             style={layout?.pos.get(n.name) ? { left: layout.pos.get(n.name).x, top: layout.pos.get(n.name).y } : undefined}
             className="absolute flex items-center gap-3 bg-surface rounded-[10px] shadow-card border border-border px-4 py-3"
           >
-            <div className={`p-2 rounded-[8px] ${n.kind === 'person' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-brand'}`}>
+            <div
+              className={`p-2 rounded-[8px] ${
+                n.kind === 'person'
+                  ? 'bg-emerald-50 text-emerald-600'
+                  : isPersonengesellschaft(companies.find((c) => c.name === n.name)?.legal_form, n.name)
+                    ? 'bg-orange-50 text-orange-500'
+                    : 'bg-blue-50 text-brand'
+              }`}
+            >
               {n.kind === 'person' ? <User size={18} /> : <Building2 size={18} />}
             </div>
             <span className="text-sm font-medium whitespace-nowrap">{n.name}</span>

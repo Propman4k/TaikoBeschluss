@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Plus, Pencil, Trash2, PenLine, Upload, Building2, User, GripVertical } from 'lucide-react'
-import { api } from '../api.js'
+import { api, isPersonengesellschaft } from '../api.js'
 import { useToast } from '../components/Toast.jsx'
 import SignatureModal from '../components/SignatureModal.jsx'
 
@@ -148,7 +148,15 @@ export default function Shareholders() {
       }`}
     >
       <GripVertical size={16} className="text-slate-300 cursor-grab shrink-0" />
-      <div className={`p-2 rounded-[8px] ${s.type === 'person' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-brand'}`}>
+      <div
+        className={`p-2 rounded-[8px] ${
+          s.type === 'person'
+            ? 'bg-emerald-50 text-emerald-600'
+            : isPersonengesellschaft(null, s.name)
+              ? 'bg-orange-50 text-orange-500'
+              : 'bg-blue-50 text-brand'
+        }`}
+      >
         {s.type === 'person' ? <User size={20} /> : <Building2 size={20} />}
       </div>
       <div className="flex-1 min-w-0">
@@ -190,7 +198,7 @@ export default function Shareholders() {
       {companies.length > 0 && (
         <div className="mb-6">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-text-muted mb-2">
-            <Building2 size={15} /> Gesellschaften
+            <Building2 size={15} /> Firmen Gesellschafter
           </h2>
           <div className="space-y-2">{companies.map(renderItem)}</div>
         </div>
@@ -199,7 +207,7 @@ export default function Shareholders() {
       {persons.length > 0 && (
         <div>
           <h2 className="flex items-center gap-2 text-sm font-semibold text-text-muted mb-2">
-            <User size={15} /> Personen
+            <User size={15} /> Personen Gesellschafter
           </h2>
           <div className="space-y-2">{persons.map(renderItem)}</div>
         </div>

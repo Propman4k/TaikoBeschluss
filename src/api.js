@@ -30,6 +30,11 @@ export const api = {
   del: (path) => request(path, { method: 'DELETE' }),
 }
 
+// Personengesellschaft (GbR) — bei Gesellschafter-Eintraegen ohne Rechtsform
+// entscheidet der Name.
+export const isPersonengesellschaft = (legalForm, name = '') =>
+  legalForm === 'gbr' || /\bGbR\b/.test(name)
+
 export const fmtDate = (iso) => {
   if (!iso) return '—'
   const [y, m, d] = iso.slice(0, 10).split('-')

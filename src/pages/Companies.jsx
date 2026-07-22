@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Plus, Pencil, Trash2, Building2, GripVertical } from 'lucide-react'
-import { api } from '../api.js'
+import { api, isPersonengesellschaft } from '../api.js'
 import { useToast } from '../components/Toast.jsx'
 
 const EMPTY = { name: '', legal_form: 'gmbh', registry_court: '', hrb: '', address: '', zip: '', city: '', shareholder_ids: [], sharesById: {} }
@@ -120,7 +120,11 @@ export default function Companies() {
           >
             <div className="flex items-center gap-4">
               <GripVertical size={16} className="text-slate-300 cursor-grab shrink-0" />
-              <div className="p-2 rounded-[8px] bg-blue-50 text-brand">
+              <div
+                className={`p-2 rounded-[8px] ${
+                  isPersonengesellschaft(c.legal_form, c.name) ? 'bg-orange-50 text-orange-500' : 'bg-blue-50 text-brand'
+                }`}
+              >
                 <Building2 size={20} />
               </div>
               <div className="flex-1 min-w-0">
