@@ -104,7 +104,10 @@ export default function SignatureModal({ onSave, onClose, existingUrl, templateU
   const canRemove = existingUrl && !hasStroke
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+    <div
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+    >
       <div className="relative bg-surface rounded-2xl shadow-elevated animate-modal-in overflow-hidden border border-border">
         <div className="px-6 py-4 border-b border-border bg-slate-50 flex items-center justify-between">
           <span className="font-semibold">Unterschrift leisten</span>

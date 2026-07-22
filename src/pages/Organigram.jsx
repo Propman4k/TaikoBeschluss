@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Building2, User } from 'lucide-react'
 import { api, isPersonengesellschaft } from '../api.js'
 import { buildGraph } from '../organigram.js'
+import CompanyModal from '../components/CompanyModal.jsx'
+import ShareholderModal from '../components/ShareholderModal.jsx'
 
 const GAP_X = 40 // Mindestabstand zwischen Knoten einer Ebene
 const GAP_Y = 110 // vertikaler Abstand zwischen Ebenen
@@ -124,11 +126,25 @@ function computeLayout(layers, edges, dims, containerWidth) {
 
 export default function Organigram() {
   const [companies, setCompanies] = useState([])
-  useEffect(() => {
+  const [shareholders, setShareholders] = useState([])
+  const [editCompany, setEditCompany] = useState(null)
+  const [editShareholder, setEditShareholder] = useState(null)
+  const load = () => {
     api.get('/api/companies').then(setCompanies).catch(() => {})
-  }, [])
+    api.get('/api/shareholders').then(setShareholders).catch(() => {})
+  }
+  useEffect(() => { load() }, [])
 
   const { layers, edges } = buildGraph(companies)
+
+  // Klick auf einen Knoten: Bearbeiten-Modal direkt hier oeffnen —
+  // verwaltete Gesellschaft -> Gesellschafts-Modal, sonst Gesellschafter-Modal.
+  function openEditor(n) {
+    const company = n.kind !== 'person' && companies.find((c) => c.name === n.name)
+    if (company) return setEditCompany(company)
+    const sh = shareholders.find((s) => s.name === n.name)
+    if (sh) setEditShareholder(sh)
+  }
 
   const containerRef = useRef(null)
   const nodeRefs = useRef(new Map())
@@ -205,8 +221,9 @@ export default function Organigram() {
               if (el) nodeRefs.current.set(n.name, el)
               else nodeRefs.current.delete(n.name)
             }}
+            onClick={() => openEditor(n)}
             style={layout?.pos.get(n.name) ? { left: layout.pos.get(n.name).x, top: layout.pos.get(n.name).y } : undefined}
-            className="absolute flex items-center gap-3 bg-surface rounded-[10px] shadow-card border border-border px-4 py-3"
+            className="absolute flex items-center gap-3 bg-surface rounded-[10px] shadow-card border border-border px-4 py-3 cursor-pointer hover:shadow-elevated hover:border-slate-300 transition-shadow"
           >
             <div
               className={`p-2 rounded-[8px] ${
@@ -223,6 +240,29 @@ export default function Organigram() {
           </div>
         ))}
       </div>
+
+      {!!editCompany && (
+        <CompanyModal
+          company={editCompany}
+          shareholders={shareholders}
+          onClose={() => setEditCompany(null)}
+          onSaved={() => {
+            setEditCompany(null)
+            load()
+          }}
+        />
+      )}
+      {!!editShareholder && (
+        <ShareholderModal
+          shareholder={editShareholder}
+          onClose={() => setEditShareholder(null)}
+          onSaved={() => {
+            setEditShareholder(null)
+            load()
+          }}
+          onChanged={load}
+        />
+      )}
     </div>
   )
 }

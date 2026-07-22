@@ -223,7 +223,10 @@ export default function Resolutions({ view = 'offen' }) {
       )}
 
       {!!picking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <div
+          onClick={(e) => e.target === e.currentTarget && setPicking(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+        >
           <div className="bg-surface rounded-2xl overflow-hidden shadow-elevated animate-modal-in border border-border w-full max-w-md">
             <div className="px-6 py-4 border-b border-border bg-slate-50 font-semibold">
               Für welche Gesellschaft?
@@ -261,7 +264,10 @@ export default function Resolutions({ view = 'offen' }) {
 
       {/* Loeschen: doppelte Abfrage (2 Schritte), Soft-Delete in den Papierkorb */}
       {!!deleting && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <div
+          onClick={(e) => e.target === e.currentTarget && setDeleting(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+        >
           <div className="bg-surface rounded-2xl overflow-hidden shadow-elevated animate-modal-in border border-border w-full max-w-md">
             <div className="px-6 py-4 border-b border-border bg-slate-50 font-semibold">
               {deleting.step === 1 ? 'In den Papierkorb verschieben?' : 'Bitte bestätigen'}
