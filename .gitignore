@@ -1,6 +1,7 @@
 node_modules/
 dist/
-server/data/
+server/data/*
+!server/data/README.md
 server/.env
 .env
 .DS_Store

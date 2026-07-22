@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchAgent fuer das TaikoBeschluss-Backup. Wird von
+  scripts/install-backup-schedule.sh nach ~/Library/LaunchAgents/ kopiert
+  (Platzhalter APP_HOME ersetzt) und via launchctl bootstrap geladen.
+
+  Laptop-Pattern (aus TaikoTrack): RunAtLoad feuert bei Login/Aufklappen,
+  StartInterval=14400 (4 h) waehrend der Mac wach ist. CalendarInterval
+  wuerde bei zugeklapptem Laptop verpasst und nicht nachgeholt.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.taikonauten.taikobeschluss.backup</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/env</string>
+    <string>node</string>
+    <string>APP_HOME/server/scripts/backup.mjs</string>
+  </array>
+
+  <!-- WorkingDirectory: node muss server/node_modules (better-sqlite3) finden -->
+  <key>WorkingDirectory</key>
+  <string>APP_HOME/server</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StartInterval</key>
+  <integer>14400</integer>
+
+  <key>StandardOutPath</key>
+  <string>LOG_DIR/taikobeschluss-backup.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>LOG_DIR/taikobeschluss-backup.log</string>
+
+  <key>LowPriorityIO</key>
+  <true/>
+</dict>
+</plist>
