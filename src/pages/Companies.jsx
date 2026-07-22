@@ -171,7 +171,7 @@ export default function Companies() {
               {editing.id ? 'Gesellschaft bearbeiten' : 'Neue Gesellschaft'}
             </div>
             <div className="p-6 space-y-4">
-              <div className="grid grid-cols-[1fr_200px] gap-4">
+              <div className="grid grid-cols-[1fr_150px] gap-4">
                 <label className="block text-sm">
                   <span className="text-text-muted">Firma</span>
                   <input className="input-base mt-1" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} placeholder="Taikonauten GmbH" required />
@@ -191,7 +191,7 @@ export default function Companies() {
                   </select>
                 </label>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-[1fr_150px] gap-4">
                 <label className="block text-sm">
                   <span className="text-text-muted">Handelsregister</span>
                   <input className="input-base mt-1" value={editing.registry_court} onChange={(e) => setEditing({ ...editing, registry_court: e.target.value })} placeholder="Amtsgericht Charlottenburg" />
