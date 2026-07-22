@@ -17,7 +17,16 @@ const withShareholders = (company) => ({
 })
 
 companiesRouter.get('/', (_req, res) => {
-  res.json(db.prepare('SELECT * FROM companies ORDER BY name').all().map(withShareholders))
+  res.json(db.prepare('SELECT * FROM companies ORDER BY position, name').all().map(withShareholders))
+})
+
+// Manuelle Reihenfolge (Drag & Drop): Body { ids: [companyId, ...] }
+companiesRouter.post('/reorder', (req, res) => {
+  const ids = Array.isArray(req.body.ids) ? req.body.ids.map(Number) : []
+  if (!ids.length) return res.status(400).json({ error: 'ids fehlen' })
+  const update = db.prepare('UPDATE companies SET position = ? WHERE id = ?')
+  db.transaction(() => ids.forEach((id, i) => update.run(i, id)))()
+  res.status(204).end()
 })
 
 function validate(body) {

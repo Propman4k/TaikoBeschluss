@@ -116,6 +116,18 @@ try {
   // Spalte existiert bereits
 }
 
+// Manuelle Sortierung (Drag & Drop in den Listen)
+for (const ddl of [
+  'ALTER TABLE companies ADD COLUMN position INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE shareholders ADD COLUMN position INTEGER NOT NULL DEFAULT 0',
+]) {
+  try {
+    db.exec(ddl)
+  } catch {
+    // Spalte existiert bereits
+  }
+}
+
 // Sicherheitsnetz gegen doppelte Beschluss-Nummern je Firma (Vergabe via MAX,
 // der Index faengt Races und Restore-Faelle ab).
 try {

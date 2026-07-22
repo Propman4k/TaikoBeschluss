@@ -209,6 +209,28 @@ describe('TaikoBeschluss API', () => {
     expect((await request(app).delete(`/api/shareholders/${sh.body.id}`)).status).toBe(204)
   })
 
+  it('Gesellschaften: manuelle Reihenfolge per Reorder', async () => {
+    const a = await request(app).post('/api/companies').send({ name: 'Zeta GmbH', shareholder_ids: [] })
+    const b = await request(app).post('/api/companies').send({ name: 'Alpha GmbH', shareholder_ids: [] })
+    expect((await request(app).post('/api/companies/reorder').send({ ids: [a.body.id, b.body.id] })).status).toBe(204)
+    const list = (await request(app).get('/api/companies')).body.map((c) => c.id)
+    expect(list.indexOf(a.body.id)).toBeLessThan(list.indexOf(b.body.id))
+
+    expect((await request(app).post('/api/companies/reorder').send({ ids: [] })).status).toBe(400)
+  })
+
+  it('Gesellschafter: manuelle Reihenfolge per Reorder', async () => {
+    const a = await request(app)
+      .post('/api/shareholders')
+      .send({ name: 'Zeta Holding', signer_name: 'Z', signer_email: 'z@example.com' })
+    const b = await request(app)
+      .post('/api/shareholders')
+      .send({ name: 'Alpha Holding', signer_name: 'A', signer_email: 'a@example.com' })
+    expect((await request(app).post('/api/shareholders/reorder').send({ ids: [a.body.id, b.body.id] })).status).toBe(204)
+    const list = (await request(app).get('/api/shareholders')).body.map((s) => s.id)
+    expect(list.indexOf(a.body.id)).toBeLessThan(list.indexOf(b.body.id))
+  })
+
   it('Standard-Unterschrift: kein PNG -> 400', async () => {
     const sh = await request(app)
       .post('/api/shareholders')

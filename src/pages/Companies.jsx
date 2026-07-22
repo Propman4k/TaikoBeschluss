@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, Building2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, Building2, GripVertical } from 'lucide-react'
 import { api } from '../api.js'
 import { useToast } from '../components/Toast.jsx'
 
@@ -17,6 +17,7 @@ export default function Companies() {
   const [items, setItems] = useState([])
   const [shareholders, setShareholders] = useState([])
   const [editing, setEditing] = useState(null)
+  const [dragId, setDragId] = useState(null)
   const toast = useToast()
 
   const load = () => {
@@ -49,6 +50,30 @@ export default function Companies() {
     }
   }
 
+  // Drag & Drop: waehrend des Ziehens lokal umsortieren, am Ende persistieren
+  function dragOver(e, overId) {
+    e.preventDefault()
+    if (dragId == null || dragId === overId) return
+    setItems((list) => {
+      const from = list.findIndex((c) => c.id === dragId)
+      const to = list.findIndex((c) => c.id === overId)
+      if (from < 0 || to < 0) return list
+      const next = [...list]
+      next.splice(to, 0, ...next.splice(from, 1))
+      return next
+    })
+  }
+  async function dragEnd() {
+    if (dragId == null) return
+    setDragId(null)
+    try {
+      await api.post('/api/companies/reorder', { ids: items.map((c) => c.id) })
+    } catch (err) {
+      toast(err.message, 'error')
+      load()
+    }
+  }
+
   function toggleShareholder(id) {
     const ids = editing.shareholder_ids.includes(id)
       ? editing.shareholder_ids.filter((x) => x !== id)
@@ -75,18 +100,30 @@ export default function Companies() {
           </div>
         )}
         {items.map((c) => (
-          <div key={c.id} className="bg-surface rounded-[10px] shadow-card border border-border px-6 py-5">
-            <div className="flex items-start gap-4">
+          <div
+            key={c.id}
+            draggable
+            onDragStart={() => setDragId(c.id)}
+            onDragOver={(e) => dragOver(e, c.id)}
+            onDragEnd={dragEnd}
+            className={`bg-surface rounded-[10px] shadow-card border border-border px-6 py-5 ${
+              dragId === c.id ? 'opacity-50' : ''
+            }`}
+          >
+            <div className="flex items-center gap-4">
+              <GripVertical size={16} className="text-slate-300 cursor-grab shrink-0" />
               <div className="p-2 rounded-[8px] bg-blue-50 text-brand">
                 <Building2 size={20} />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="font-semibold">{c.name}</div>
-                <div className="text-sm text-text-muted">
-                  {[c.registry_court, c.hrb].filter(Boolean).join(' · ')}
-                </div>
-                <div className="text-sm text-text-muted">
-                  {[c.address, [c.zip, c.city].filter(Boolean).join(' ')].filter(Boolean).join(', ')}
+                <div className="text-sm font-medium">{c.name}</div>
+                <div className="text-sm text-text-muted truncate">
+                  {[
+                    [c.registry_court, c.hrb].filter(Boolean).join(' · '),
+                    [c.address, [c.zip, c.city].filter(Boolean).join(' ')].filter(Boolean).join(', '),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </div>
                 {c.shareholders.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
@@ -100,12 +137,12 @@ export default function Companies() {
               </div>
               <button
                 onClick={() => setEditing({ ...c, shareholder_ids: c.shareholders.map((s) => s.id) })}
-                className="p-2 rounded-[6px] text-slate-500 hover:bg-slate-100 cursor-pointer"
+                className="p-2 rounded-[6px] text-slate-500 hover:bg-slate-100 cursor-pointer self-center"
                 aria-label="Bearbeiten"
               >
                 <Pencil size={16} />
               </button>
-              <button onClick={() => remove(c.id)} className="p-2 rounded-[6px] text-slate-500 hover:bg-red-50 hover:text-red-600 cursor-pointer" aria-label="Löschen">
+              <button onClick={() => remove(c.id)} className="p-2 rounded-[6px] text-slate-500 hover:bg-red-50 hover:text-red-600 cursor-pointer self-center" aria-label="Löschen">
                 <Trash2 size={16} />
               </button>
             </div>

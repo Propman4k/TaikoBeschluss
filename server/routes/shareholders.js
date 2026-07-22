@@ -15,7 +15,16 @@ const getSafe = (id) =>
   db.prepare(`SELECT ${SAFE_COLS} FROM shareholders s WHERE s.id = ?`).get(id)
 
 shareholdersRouter.get('/', (_req, res) => {
-  res.json(db.prepare(`SELECT ${SAFE_COLS} FROM shareholders s ORDER BY s.name`).all())
+  res.json(db.prepare(`SELECT ${SAFE_COLS} FROM shareholders s ORDER BY s.position, s.name`).all())
+})
+
+// Manuelle Reihenfolge (Drag & Drop, je Kategorie): Body { ids: [shareholderId, ...] }
+shareholdersRouter.post('/reorder', (req, res) => {
+  const ids = Array.isArray(req.body.ids) ? req.body.ids.map(Number) : []
+  if (!ids.length) return res.status(400).json({ error: 'ids fehlen' })
+  const update = db.prepare('UPDATE shareholders SET position = ? WHERE id = ?')
+  db.transaction(() => ids.forEach((id, i) => update.run(i, id)))()
+  res.status(204).end()
 })
 
 function validate(body) {

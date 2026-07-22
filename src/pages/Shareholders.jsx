@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Plus, Pencil, Trash2, PenLine, Upload, Building2, User } from 'lucide-react'
+import { Plus, Pencil, Trash2, PenLine, Upload, Building2, User, GripVertical } from 'lucide-react'
 import { api } from '../api.js'
 import { useToast } from '../components/Toast.jsx'
 import SignatureModal from '../components/SignatureModal.jsx'
@@ -11,7 +11,8 @@ export default function Shareholders() {
   const [editing, setEditing] = useState(null) // null | {id?, ...form}
   const [sigModal, setSigModal] = useState(false)
   const [sigV, setSigV] = useState(0) // Cache-Bust fuer die Vorschau
-  const [dragOver, setDragOver] = useState(false)
+  const [dragOver, setDragOver] = useState(false) // Signatur-Dropzone im Modal
+  const [dragShId, setDragShId] = useState(null) // Listen-Sortierung
   const fileRef = useRef(null)
   const toast = useToast()
 
@@ -108,10 +109,46 @@ export default function Shareholders() {
   const companies = items.filter((s) => s.type !== 'person')
   const persons = items.filter((s) => s.type === 'person')
 
+  // Drag & Drop nur innerhalb derselben Kategorie (Gesellschaft/Person)
+  function rowDragOver(e, over) {
+    e.preventDefault()
+    if (dragShId == null || dragShId === over.id) return
+    setItems((list) => {
+      const from = list.findIndex((s) => s.id === dragShId)
+      const to = list.findIndex((s) => s.id === over.id)
+      if (from < 0 || to < 0 || list[from].type !== list[to].type) return list
+      const next = [...list]
+      next.splice(to, 0, ...next.splice(from, 1))
+      return next
+    })
+  }
+  async function rowDragEnd() {
+    if (dragShId == null) return
+    setDragShId(null)
+    try {
+      await api.post('/api/shareholders/reorder', { ids: items.map((s) => s.id) })
+    } catch (err) {
+      toast(err.message, 'error')
+      load()
+    }
+  }
+
   const Item = ({ s }) => (
-    <div className="flex items-center gap-4 bg-surface rounded-[10px] shadow-card border border-border px-5 py-4">
+    <div
+      draggable
+      onDragStart={() => setDragShId(s.id)}
+      onDragOver={(e) => rowDragOver(e, s)}
+      onDragEnd={rowDragEnd}
+      className={`flex items-center gap-4 bg-surface rounded-[10px] shadow-card border border-border px-5 py-4 ${
+        dragShId === s.id ? 'opacity-50' : ''
+      }`}
+    >
+      <GripVertical size={16} className="text-slate-300 cursor-grab shrink-0" />
+      <div className="p-2 rounded-[8px] bg-emerald-50 text-emerald-600">
+        {s.type === 'person' ? <User size={20} /> : <Building2 size={20} />}
+      </div>
       <div className="flex-1 min-w-0">
-        <div className="font-medium truncate">{s.name}</div>
+        <div className="text-sm font-medium truncate">{s.name}</div>
         <div className="text-sm text-text-muted truncate">
           {s.type === 'person' ? s.signer_email : `Unterzeichner: ${s.signer_name} · ${s.signer_email}`}
         </div>
