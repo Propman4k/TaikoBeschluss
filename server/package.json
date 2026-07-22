@@ -1,0 +1,24 @@
+{
+  "name": "taiko-beschluss-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch index.js",
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.4.1",
+    "better-sqlite3-session-store": "^0.1.0",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.5.2",
+    "express-session": "^1.19.0",
+    "google-auth-library": "^10.9.0",
+    "helmet": "^8.1.0",
+    "pdf-lib": "^1.17.1"
+  },
+  "devDependencies": {
+    "supertest": "^7.2.2"
+  }
+}

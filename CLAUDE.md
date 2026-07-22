@@ -1,0 +1,44 @@
+# TaikoBeschluss
+
+Tool zum Erstellen, Freigeben und Unterschreiben von Gesellschafterbeschluessen.
+Stack identisch zu TaikoEat/TaikoTasks: React 19 + Vite + Tailwind v4 (Client,
+Port 3009) und Express 5 + better-sqlite3 (Server, Port 3010).
+
+## Starten
+
+```
+npm run dev        # Server (3010) + Client (3009)
+npm test           # Vitest (server/test/api.test.js = Smoke-Durchstich)
+```
+
+Dev-Login ohne Google OAuth: `DEV_LOGIN=1` in `server/.env`, dann
+`/api/auth/dev?email=...` aufrufen. Nur aktiv wenn nicht Production.
+
+## Architektur-Entscheidungen
+
+- **Rahmen vs. Inhalt**: Der formale Beschluss-Rahmen (Einleitung, Gesellschafter-
+  liste, Schlussformel, Ort/Datum, Unterschriftsbloecke) wird in
+  `server/services/beschluss.js` (`buildFrame`) generiert — eine Quelle fuer
+  Frontend-Vorschau und PDF. Chat/KI und Direkt-Bearbeitung aendern NUR
+  `resolutions.content` (den variablen Teil).
+- **Unterschriften bleiben bei Nachbearbeitung erhalten** (bewusste User-
+  Entscheidung); `signed_at`/`signed_by` protokollieren, wann wer gezeichnet hat.
+- **Login-Zuordnung**: Unterzeichner werden ueber `shareholders.signer_email`
+  dem Google-Login zugeordnet. Zugang = ENV-Whitelist `ALLOWED_EMAILS` ODER
+  als signer_email hinterlegt (server/auth.js `isAllowed`).
+- **Gesellschafter sind zentral** (Tabelle `shareholders`) und werden Firmen
+  ueber `company_shareholders` zugeordnet.
+- **KI: direkter Gemini-Key** (gleiches Muster wie TaikoEat): `server/services/ai.js`
+  ist 1:1 aus TaikoEat uebernommen — OpenAI-kompatibler Endpoint, Key in
+  `LLM_API_KEY`, Praeferenz in `LLM_MODELS`, Discovery via GET /models, per
+  `LLM_BASE_URL` optional auf ein Gateway umstellbar. Kein Modellname im Code.
+  Structured Output: `{reply, content, title}`.
+- **PDF**: pdf-lib in `server/services/pdf.js`, schlicht ohne Logo,
+  Signatur-PNGs aus `server/data/signatures/` eingebettet.
+- **SignatureModal** 1:1 aus TaikoEat uebernommen.
+
+## Offen / spaeter
+
+- E-Mail-Benachrichtigung bei Freigabe (nodemailer, Muster in TaikoEat)
+- Google-OAuth-Client + LiteLLM-Key provisionieren (server/.env.example)
+- Deployment NAS + Cloudflare wie andere Tools
