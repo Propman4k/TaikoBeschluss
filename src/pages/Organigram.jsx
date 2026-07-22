@@ -64,28 +64,33 @@ export default function Organigram() {
         <svg className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden>
           {lines.map((l, i) => {
             const midY = (l.y1 + l.y2) / 2
+            const label = l.shares != null ? fmtShares(l.shares) : null
+            const labelX = (l.x1 + l.x2) / 2
+            const labelW = label ? label.length * 6.5 + 14 : 0
             return (
               <g key={i}>
+                {/* Winkel-Linie (senkrecht/waagerecht) wie im klassischen Organigramm */}
                 <path
-                  d={`M ${l.x1} ${l.y1} C ${l.x1} ${midY}, ${l.x2} ${midY}, ${l.x2} ${l.y2}`}
+                  d={`M ${l.x1} ${l.y1} L ${l.x1} ${midY} L ${l.x2} ${midY} L ${l.x2} ${l.y2}`}
                   fill="none"
                   stroke="#94a3b8"
                   strokeWidth="1.5"
                 />
-                {l.shares != null && (
-                  <text
-                    x={(l.x1 + l.x2) / 2}
-                    y={midY - 5}
-                    textAnchor="middle"
-                    fontSize="11"
-                    fontWeight="600"
-                    fill="#475569"
-                    stroke="#F3F4F8"
-                    strokeWidth="4"
-                    paintOrder="stroke"
-                  >
-                    {fmtShares(l.shares)}
-                  </text>
+                {!!label && (
+                  <>
+                    <rect
+                      x={labelX - labelW / 2}
+                      y={midY - 10}
+                      width={labelW}
+                      height={20}
+                      rx="5"
+                      fill="white"
+                      stroke="#e2e8f0"
+                    />
+                    <text x={labelX} y={midY + 4} textAnchor="middle" fontSize="11" fontWeight="600" fill="#475569">
+                      {label}
+                    </text>
+                  </>
                 )}
               </g>
             )
@@ -93,7 +98,7 @@ export default function Organigram() {
         </svg>
 
         {layers.map((layer, i) => (
-          <div key={i} className={`relative flex flex-wrap justify-center gap-6 ${i < layers.length - 1 ? 'mb-20' : ''}`}>
+          <div key={i} className={`relative flex flex-wrap justify-evenly gap-6 ${i < layers.length - 1 ? 'mb-24' : ''}`}>
             {layer.map((n) => (
               <div
                 key={n.name}
