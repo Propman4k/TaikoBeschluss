@@ -97,7 +97,7 @@ describe('uploadResolutionPdf', () => {
     const { uploadResolutionPdf } = await loadDrive()
     const { resolutionId } = seed()
     let searches = 0
-    vi.stubGlobal('fetch', async (url, opts = {}) => {
+    vi.stubGlobal('fetch', async (url) => {
       const u = String(url)
       if (u.includes('/drive/v3/files?q=')) {
         searches++
@@ -120,7 +120,7 @@ describe('uploadResolutionPdf', () => {
     const { companyId, resolutionId } = seed()
     db.prepare('UPDATE companies SET drive_folder_id = ? WHERE id = ?').run('folder-x', companyId)
     db.prepare('UPDATE resolutions SET drive_file_id = ? WHERE id = ?').run('file-weg', resolutionId)
-    vi.stubGlobal('fetch', async (url, opts = {}) => {
+    vi.stubGlobal('fetch', async (url) => {
       const u = String(url)
       if (u.includes('/upload/drive/v3/files/file-weg')) return new Response('not found', { status: 404 })
       if (u.includes('/upload/drive/v3/files?')) return jsonRes({ id: 'file-ersatz', webViewLink: 'link-ersatz' })
