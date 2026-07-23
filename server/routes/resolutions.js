@@ -324,7 +324,7 @@ resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
   // (z.B. wer hinter einer Beteiligungs-GmbH steht) kennt statt nachzufragen.
   const orgRows = db
     .prepare(
-      `SELECT c.name AS company, s.name, s.type, s.signer_name, cs.shares
+      `SELECT c.name AS company, c.managing_directors, s.name, s.type, s.signer_name, cs.shares
        FROM company_shareholders cs
        JOIN companies c ON c.id = cs.company_id
        JOIN shareholders s ON s.id = cs.shareholder_id
@@ -339,7 +339,8 @@ resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
       const via = x.type === 'company' ? `, vertreten durch ${x.signer_name}` : ' (natuerliche Person)'
       return `${x.name}${share}${via}`
     })
-    return `- ${name}: ${parts.join('; ')}`
+    const gf = rows[0].managing_directors ? ` Geschäftsführung: ${rows[0].managing_directors}.` : ''
+    return `- ${name}: ${parts.join('; ')}.${gf}`
   })
 
   const system = [

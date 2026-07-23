@@ -102,6 +102,8 @@ db.exec(`
 for (const ddl of [
   'ALTER TABLE resolutions ADD COLUMN deleted_at TEXT', // Soft-Delete / Papierkorb
   'ALTER TABLE shareholders ADD COLUMN default_signature_path TEXT', // fixe Standard-Unterschrift
+  // Geschaeftsfuehrer als Freitext (koennen Personen sein, die sonst nirgends erfasst sind)
+  "ALTER TABLE companies ADD COLUMN managing_directors TEXT NOT NULL DEFAULT ''",
 ]) {
   try {
     db.exec(ddl)

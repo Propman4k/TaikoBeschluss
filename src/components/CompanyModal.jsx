@@ -8,6 +8,7 @@ export const EMPTY_COMPANY = {
   legal_form: 'gmbh',
   registry_court: '',
   hrb: '',
+  managing_directors: '',
   address: '',
   zip: '',
   city: '',
@@ -97,6 +98,15 @@ export default function CompanyModal({ company, shareholders, onClose, onSaved }
               <input className="input-base mt-1" value={editing.hrb} onChange={(e) => setEditing({ ...editing, hrb: e.target.value })} placeholder="HRB 265001 B" />
             </label>
           </div>
+          <label className="block text-sm">
+            <span className="text-text-muted">Geschäftsführung</span>
+            <input
+              className="input-base mt-1"
+              value={editing.managing_directors ?? ''}
+              onChange={(e) => setEditing({ ...editing, managing_directors: e.target.value })}
+              placeholder="z.B. Maik Fahldieck, Jonas Lempa — auch Personen, die sonst nicht erfasst sind"
+            />
+          </label>
           <label className="block text-sm">
             <span className="text-text-muted">Straße und Hausnummer</span>
             <input className="input-base mt-1" value={editing.address} onChange={(e) => setEditing({ ...editing, address: e.target.value })} placeholder="Prinzenallee 74" />

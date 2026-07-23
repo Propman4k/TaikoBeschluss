@@ -38,6 +38,7 @@ function validate(body) {
     legal_form: LEGAL_FORMS.includes(body.legal_form) ? body.legal_form : 'gmbh',
     registry_court: String(body.registry_court ?? '').trim(),
     hrb: String(body.hrb ?? '').trim(),
+    managing_directors: String(body.managing_directors ?? '').trim(),
     address: String(body.address ?? '').trim(),
     zip: String(body.zip ?? '').trim(),
     city: String(body.city ?? '').trim(),
@@ -67,9 +68,9 @@ companiesRouter.post('/', (req, res) => {
   if (!v) return res.status(400).json({ error: 'Firmenname erforderlich' })
   const info = db
     .prepare(
-      'INSERT INTO companies (name, legal_form, registry_court, hrb, address, zip, city) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO companies (name, legal_form, registry_court, hrb, managing_directors, address, zip, city) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     )
-    .run(v.name, v.legal_form, v.registry_court, v.hrb, v.address, v.zip, v.city)
+    .run(v.name, v.legal_form, v.registry_court, v.hrb, v.managing_directors, v.address, v.zip, v.city)
   setShareholders(info.lastInsertRowid, v.shareholderEntries)
   res
     .status(201)
@@ -81,9 +82,9 @@ companiesRouter.put('/:id', (req, res) => {
   if (!v) return res.status(400).json({ error: 'Firmenname erforderlich' })
   const info = db
     .prepare(
-      'UPDATE companies SET name = ?, legal_form = ?, registry_court = ?, hrb = ?, address = ?, zip = ?, city = ? WHERE id = ?',
+      'UPDATE companies SET name = ?, legal_form = ?, registry_court = ?, hrb = ?, managing_directors = ?, address = ?, zip = ?, city = ? WHERE id = ?',
     )
-    .run(v.name, v.legal_form, v.registry_court, v.hrb, v.address, v.zip, v.city, req.params.id)
+    .run(v.name, v.legal_form, v.registry_court, v.hrb, v.managing_directors, v.address, v.zip, v.city, req.params.id)
   if (!info.changes) return res.status(404).json({ error: 'nicht gefunden' })
   setShareholders(Number(req.params.id), v.shareholderEntries)
   res.json(withShareholders(db.prepare('SELECT * FROM companies WHERE id = ?').get(req.params.id)))
