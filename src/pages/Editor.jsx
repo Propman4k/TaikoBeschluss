@@ -313,7 +313,7 @@ export default function Editor({ id }) {
               <Sparkles size={15} /> {r.content ? 'Beschluss aktualisieren' : 'Beschluss verfassen'}
             </button>
           )}
-          <div className="flex items-end gap-2">
+          <div className="relative">
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -325,15 +325,15 @@ export default function Editor({ id }) {
               }}
               rows={2}
               placeholder="Was soll beschlossen werden?"
-              className="input-base !text-text resize-none"
+              className="input-base !text-text resize-none min-h-[70px] !pr-10 focus:!ring-0 focus:!border-slate-200"
             />
             <button
               type="submit"
               disabled={!input.trim() || sending}
-              className="p-2.5 rounded-[8px] text-white bg-brand hover:bg-brand-hover disabled:bg-brand/40 transition-colors cursor-pointer"
+              className="absolute right-2 bottom-2.5 p-1.5 text-slate-400 hover:text-slate-600 disabled:text-slate-300 transition-colors cursor-pointer"
               aria-label="Senden"
             >
-              <Send size={16} />
+              <Send size={17} />
             </button>
           </div>
         </form>
