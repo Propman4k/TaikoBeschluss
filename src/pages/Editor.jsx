@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Send, FileDown, PenLine, Check, Pencil, Loader2 } from 'lucide-react'
+import { ArrowLeft, Send, FileDown, PenLine, Check, Pencil, Loader2, Sparkles } from 'lucide-react'
 import { api, fmtDate } from '../api.js'
 import { useToast } from '../components/Toast.jsx'
 import SignatureModal from '../components/SignatureModal.jsx'
@@ -24,15 +24,11 @@ export default function Editor({ id }) {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [chat, sending])
 
-  async function send(e) {
-    e.preventDefault()
-    const text = input.trim()
-    if (!text || sending) return
-    setInput('')
-    setChat((c) => [...c, { id: `tmp-${Date.now()}`, role: 'user', content: text }])
+  async function chatTurn(body, userBubble) {
+    setChat((c) => [...c, { id: `tmp-${Date.now()}`, role: 'user', content: userBubble }])
     setSending(true)
     try {
-      const res = await api.post(`/api/resolutions/${id}/chat`, { message: text })
+      const res = await api.post(`/api/resolutions/${id}/chat`, body)
       setChat((c) => [...c, { id: `tmp-a-${Date.now()}`, role: 'assistant', content: res.reply, wrote: res.wrote }])
       setR(res.resolution)
     } catch (err) {
@@ -40,6 +36,20 @@ export default function Editor({ id }) {
     } finally {
       setSending(false)
     }
+  }
+
+  async function send(e) {
+    e.preventDefault()
+    const text = input.trim()
+    if (!text || sending) return
+    setInput('')
+    await chatTurn({ message: text }, text)
+  }
+
+  // Verfassen: Diskussion beenden, Entwurf aus dem gesamten Gespraech erstellen
+  async function compose() {
+    if (sending) return
+    await chatTurn({ compose: true }, 'Bitte verfasse jetzt den Beschluss auf Basis unseres Gesprächs.')
   }
 
   async function patch(fields) {
@@ -252,8 +262,8 @@ export default function Editor({ id }) {
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
           {chat.length === 0 && (
             <div className="text-sm text-text-muted px-2 py-6 text-center">
-              Beschreibe, was beschlossen werden soll — die KI formuliert den Beschlusstext
-              und aktualisiert die Vorschau rechts.
+              Beschreibe und diskutiere, was beschlossen werden soll. Wenn alles geklärt ist,
+              erstellt „Verfassen" den Beschlussentwurf rechts.
             </div>
           )}
           {chat.map((m) => (
@@ -287,6 +297,16 @@ export default function Editor({ id }) {
         </div>
 
         <form onSubmit={send} className="p-3 border-t border-border">
+          {!r.content && chat.length > 0 && (
+            <button
+              type="button"
+              onClick={compose}
+              disabled={sending}
+              className="w-full mb-2 inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-brand border border-brand/40 rounded-[8px] hover:bg-blue-50 disabled:opacity-40 transition-colors cursor-pointer"
+            >
+              <Sparkles size={15} /> Beschluss verfassen
+            </button>
+          )}
           <div className="flex items-end gap-2">
             <textarea
               value={input}

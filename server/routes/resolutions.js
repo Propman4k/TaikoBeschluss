@@ -311,7 +311,12 @@ const chatLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 60 })
 resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
   const r = activeResolution(req.params.id)
   if (!r) return res.status(404).json({ error: 'nicht gefunden' })
-  const text = String(req.body.message ?? '').trim()
+  // Drei Modi: Diskussion (kein Entwurf, kein compose — schreibt NIE),
+  // Verfassen (compose=true — synthetisiert aus dem ganzen Gespraech),
+  // Nachbearbeitung (Entwurf existiert — Aenderungswuensche wirken direkt).
+  const composing = req.body.compose === true
+  let text = String(req.body.message ?? '').trim()
+  if (!text && composing) text = 'Bitte verfasse jetzt den Beschluss auf Basis unseres Gesprächs.'
   if (!text) return res.status(400).json({ error: 'Nachricht fehlt' })
 
   const company = companyOf(r)
@@ -343,27 +348,48 @@ resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
     return `- ${name}: ${parts.join('; ')}.${gf}`
   })
 
-  const system = [
+  const BASE = [
     'WICHTIG — Rechtschreibung: Verwende in ALLEN Ausgaben (reply, content, title) echte deutsche Umlaute und ß: ä, ö, ü, Ä, Ö, Ü, ß. Schreibe NIEMALS Ersatzformen wie ae, oe, ue oder ss.',
     'Du bist ein erfahrener deutscher Rechtsanwalt und Fachanwalt für Gesellschaftsrecht und Steuerrecht.',
-    'Du unterstützt beim Formulieren von Gesellschafterbeschlüssen einer deutschen Gesellschaft und weist proaktiv auf rechtliche oder steuerliche Fallstricke hin (z.B. Formerfordernisse, notarielle Beurkundung, steuerliche Folgen).',
     'Duze den Nutzer. Antworte im Chat KNAPP und sachlich — KEINE Begrüßung, KEIN Smalltalk, KEINE Füllsätze oder Meta-Kommentare (also nicht "klingt nach einem Plan", nicht "um es rechtssicher zu formulieren"). Komm direkt zur Sache.',
+  ]
+
+  const WRITING_RULES = [
     'Der formale Rahmen (Einleitung, Gesellschafterliste, Schlussformel, Ort/Datum, Unterschriften) wird automatisch erzeugt.',
     'Du formulierst NUR den variablen Beschlussteil (was die Versammlung beschließt), präzise und in üblicher juristischer Sprache.',
     'WICHTIG — Vollständigkeit: Der Beschluss muss aus sich heraus vollständig und bestimmt sein. Verweise NIEMALS auf Anlagen, Entwürfe oder beigefügte Dokumente — dieses Tool kann nichts anhängen. Alle Konditionen (Betrag, Zinssatz, Zinsfälligkeit, Laufzeit, Tilgungsrecht, Termine) gehören ausformuliert in den Beschlusstext.',
     'Formulierungsgrundsätze: Die Gesellschafterversammlung stimmt zu, weist an, bestellt oder stellt fest — sie handelt nicht selbst für die Gesellschaft (also nicht "Die Gesellschaft gewährt ...", sondern "Dem Abschluss eines Darlehensvertrags ... wird zugestimmt. Die Geschäftsführung wird angewiesen ..."). Keine unbestimmten oder umgangssprachlichen Begriffe (nicht "flexible Tilgung", sondern "Der Darlehensnehmer ist berechtigt, das Darlehen jederzeit ganz oder teilweise zurückzuzahlen"). Kein Punkt regelt etwas, das ein anderer Punkt schon regelt.',
     'Stil des Beschlusstexts: kurz und prägnant, keine Schachtelsätze. Gliedere immer in einzelne nummerierte Punkte (1., 2., ...) — ein Punkt pro Regelungsgegenstand, nie ein großer Textblock. Kein Markdown, reiner Text mit Absätzen.',
-    'WICHTIG — Rückfragen: Wenn Details fehlen (Beträge, Zinssatz, Laufzeit, Daten, Konditionen, Beteiligte, steuerliche Absicht), stelle ZUERST Rückfragen, BEVOR du schreibst. Stelle GENAU EINE Frage pro Antwort im Format "Frage X: <Frage>". Beim ERSTEN Nachfragen nenne kurz die Anzahl offener Fragen, z.B. "Dazu habe ich noch 3 Fragen. Frage 1: ...". Danach je Antwort nur die nächste ("Frage 2: ..."). Bündle NIEMALS mehrere Fragen in einer Nachricht.',
     'RECHTSPRÜFUNG vor dem finalen Beschluss: Bestimme zuerst den Beschlusstyp (z.B. Darlehen an Geschäftsführer/Gesellschafter, Gewinnverwendung, Geschäftsführer-Bestellung oder -Abberufung, Entlastung, Satzungsänderung, Kapitalmaßnahme) und prüfe die für DIESEN Typ einschlägigen Normen, Formerfordernisse und üblichen Feststellungen — wie ein Fachanwalt, der das passende Muster aus seiner Bibliothek zieht. Konkret bei Rechtsgeschäften mit Geschäftsführern oder Gesellschaftern: Feststellung der Marktüblichkeit der Konditionen aufnehmen (vGA-Vorsorge) und auf ein etwaiges Stimmverbot nach § 47 Abs. 4 GmbHG in "reply" hinweisen. NUR bei Kreditgewährung an Geschäftsführer zusätzlich die Feststellung nach § 43a GmbHG aufnehmen (Kredit nicht aus dem zur Erhaltung des Stammkapitals erforderlichen Vermögen) — § 43a gilt für Kredite, nicht für sonstige Verträge wie Miete oder Kauf. Zitiere generell nur Normen, die für das konkrete Geschäft einschlägig sind. WICHTIG — keine erfundenen Tatsachen: Der Beschluss darf nur Tatsachen feststellen oder voraussetzen, die der Nutzer genannt oder bestätigt hat. Erfinde keine Paragrafen-Nummern des Gesellschaftsvertrags, keine bestehende Anteils-Stückelung, keine eingeholten Vergleichsangebote oder ähnliche Fakten — formuliere neutral ("Die Bestimmung des Gesellschaftsvertrags über X wird neu gefasst") oder frage nach. Eine Befreiung von § 181 BGB nimmst du NUR auf, wenn tatsächlich ein Insichgeschäft vorliegt (dieselbe Person steht auf beiden Seiten des Geschäfts) — und dann NUR für die konkret betroffene Person, nicht pauschal für die ganze Geschäftsführung, und nur soweit die beschließende Gesellschaft die Befreiung überhaupt erteilen kann (für die Gegenseite eines Vertrags kann sie es nicht). Echte Bedenken nennst du KNAPP in "reply".',
-    'SELBST-REVIEW, bevor du mit writeContent=true lieferst: Ist jede Antwort des Nutzers im Text abgebildet (nichts unterwegs verloren)? Ist jeder Punkt so bestimmt, dass ein Dritter ihn ohne Rückfrage vollziehen könnte? Regelt kein Punkt etwas doppelt? Würde ein Senior-Partner jede Formulierung so unterschreiben? Erst wenn alles ja: liefern.',
-    'Solange du fragst: writeContent=false. Erst wenn alles geklärt und rechtlich geprüft ist, lieferst du den fertigen Beschluss mit writeContent=true — ohne Ankündigung, einfach den Text (in "reply" ein kurzer Satz wie "Beschluss formuliert." plus ggf. ein knapper rechtlicher Hinweis).',
-    'Wenn der Nutzer den Beschluss leeren/verwerfen will ("nimm alles weg", "lösche", "fang neu an"): writeContent=true und content="" (leerer String). NUR so wird das Dokument tatsächlich geleert.',
-    `Gesellschaft: ${company.name} (Rechtsform: ${company.legal_form}), ${company.registry_court}, ${company.hrb}, Sitz: ${company.city}. Formuliere den Beschluss rechtlich passend zu dieser Rechtsform.`,
+    'SELBST-REVIEW, bevor du mit writeContent=true lieferst: Ist jede Angabe des Nutzers aus dem GESAMTEN Gespräch im Text abgebildet (nichts unterwegs verloren)? Ist jeder Punkt so bestimmt, dass ein Dritter ihn ohne Rückfrage vollziehen könnte? Regelt kein Punkt etwas doppelt? Würde ein Senior-Partner jede Formulierung so unterschreiben? Erst wenn alles ja: liefern.',
+    'Bei writeContent=true gibst du in "content" IMMER den vollständigen neuen Beschlusstext zurück (nicht nur die Änderung).',
+  ]
+
+  const MODE = composing
+    ? [
+        'VERFASSEN-MODUS: Der Nutzer hat auf "Verfassen" gedrückt. Synthetisiere aus dem GESAMTEN bisherigen Gespräch (alle Fakten, Wünsche, Zwischenergebnisse und rechtlichen Klärungen) den vollständigen Beschlusstext und liefere ihn mit writeContent=true und passendem title. Stelle jetzt KEINE Rückfragen mehr — es sei denn, essentielle Angaben fehlen, ohne die der Beschluss unbestimmt wäre: Dann writeContent=false und nenne in "reply" KNAPP die fehlenden Punkte.',
+        ...WRITING_RULES,
+      ]
+    : r.content
+      ? [
+          'NACHBEARBEITUNGS-MODUS: Es existiert bereits ein Beschlussentwurf. Konkrete Änderungswünsche setzt du direkt um (writeContent=true, vollständiger neuer Text). Fragen, Diskussion oder Rückversicherung beantwortest du als beratender Fachanwalt, OHNE das Dokument zu ändern (writeContent=false). Wenn der Nutzer den Beschluss leeren/verwerfen will ("nimm alles weg", "lösche", "fang neu an"): writeContent=true und content="" (leerer String).',
+          ...WRITING_RULES,
+        ]
+      : [
+          'DISKUSSIONS-MODUS: Es gibt noch keinen Beschlussentwurf. In diesem Modus schreibst du NIEMALS das Dokument — writeContent ist IMMER false, content bleibt leer. Du bist beratender Fachanwalt: Beantworte Fragen, diskutiere Gestaltungsoptionen, weise proaktiv auf rechtliche und steuerliche Fallstricke hin (Formerfordernisse, notarielle Beurkundung, Stimmverbote, vGA-Risiken) und sammle die wesentlichen Eckpunkte des geplanten Beschlusses.',
+          'Wenn für den späteren Beschluss essentielle Angaben fehlen (Beträge, Zinssatz, Laufzeit, Daten, Konditionen, Beteiligte), frage gezielt nach — GENAU EINE Frage pro Antwort im Format "Frage X: <Frage>". Beim ERSTEN Nachfragen nenne kurz die Anzahl offener Fragen. Reine Diskussionsbeiträge des Nutzers beantwortest du aber einfach, ohne eine Frage anzuhängen.',
+          'Sobald aus deiner Sicht alles Wesentliche geklärt ist, sag dem Nutzer in einem kurzen Satz, dass er den Entwurf jetzt über den Button "Verfassen" erstellen lassen kann.',
+        ]
+
+  const CONTEXT = [
+    `Dein Gesprächspartner ist ${req.user.name || req.user.email} — "ich"/"mich" in Nutzer-Nachrichten meint diese Person.`,
+    `Gesellschaft: ${company.name} (Rechtsform: ${company.legal_form}), ${company.registry_court}, ${company.hrb}, Sitz: ${company.city}. Der Beschluss muss rechtlich zu dieser Rechtsform passen.`,
     `Gesellschafter: ${shareholders.map((s) => s.name).join(', ')}.`,
     `Beteiligungsstruktur der gesamten Firmengruppe (nutze dieses Wissen über Beteiligungen, Quoten und Verflechtungen, statt danach zu fragen):\n${orgLines.join('\n')}`,
     `Aktueller Beschlusstext:\n${r.content || '(noch leer)'}`,
-    'Bei writeContent=true gibst du in "content" IMMER den vollständigen neuen Beschlusstext zurück (nicht nur die Änderung).',
-  ].join('\n')
+  ]
+
+  const system = [...BASE, ...MODE, ...CONTEXT].join('\n')
 
   try {
     db.prepare(`INSERT INTO chat_messages (resolution_id, role, content) VALUES (?, 'user', ?)`).run(r.id, text)
@@ -396,6 +422,9 @@ resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
     parsed.content = String(parsed.content ?? '').replace(/\\n/g, '\n')
     parsed.reply = String(parsed.reply ?? '')
     parsed.title = String(parsed.title ?? '')
+    // Diskussionsmodus-Garantie: Vor dem ersten "Verfassen" wird nie geschrieben,
+    // egal was das Modell liefert. Deterministisch, nicht nur per Prompt.
+    if (!composing && !r.content) parsed.writeContent = false
     db.prepare(
       `INSERT INTO chat_messages (resolution_id, role, content, wrote) VALUES (?, 'assistant', ?, ?)`,
     ).run(r.id, parsed.reply, parsed.writeContent ? 1 : 0)

@@ -43,12 +43,12 @@ beforeEach(() => {
 })
 
 describe('POST /api/resolutions/:id/chat', () => {
-  it('writeContent=true schreibt content und title', async () => {
+  it('compose=true schreibt content und title', async () => {
     const r = await freshResolution()
     chatCompletionWithFallback.mockResolvedValue(
       llmReply({ reply: 'Beschluss formuliert.', writeContent: true, content: '1. Testpunkt.', title: 'Testbeschluss' }),
     )
-    const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'Formuliere.' })
+    const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'Formuliere.', compose: true })
     expect(res.status).toBe(200)
     expect(res.body.wrote).toBe(true)
     expect(res.body.resolution.content).toBe('1. Testpunkt.')
@@ -58,6 +58,42 @@ describe('POST /api/resolutions/:id/chat', () => {
       { role: 'user', wrote: 0 },
       { role: 'assistant', wrote: 1 },
     ])
+  })
+
+  it('Diskussionsmodus (kein Entwurf, kein compose): writeContent=true wird ignoriert', async () => {
+    const r = await freshResolution()
+    chatCompletionWithFallback.mockResolvedValue(
+      llmReply({ reply: 'ok', writeContent: true, content: '1. Sollte nicht landen.', title: 'Nein' }),
+    )
+    const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'Darlehen 5000 Euro' })
+    expect(res.body.wrote).toBe(false)
+    expect(res.body.resolution.content).toBe('')
+    expect(res.body.resolution.title).toBe('')
+  })
+
+  it('compose=true ohne message nutzt Standard-Verfassen-Nachricht', async () => {
+    const r = await freshResolution()
+    chatCompletionWithFallback.mockResolvedValue(
+      llmReply({ reply: 'Beschluss formuliert.', writeContent: true, content: '1. Punkt.', title: 'T' }),
+    )
+    const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ compose: true })
+    expect(res.status).toBe(200)
+    expect(res.body.wrote).toBe(true)
+    const user = db
+      .prepare(`SELECT content FROM chat_messages WHERE resolution_id = ? AND role = 'user'`)
+      .get(r.id)
+    expect(user.content).toContain('verfasse')
+  })
+
+  it('Nachbearbeitung (Entwurf existiert): writeContent=true wirkt ohne compose', async () => {
+    const r = await freshResolution()
+    await request(app).patch(`/api/resolutions/${r.id}`).send({ content: '1. Alt.' })
+    chatCompletionWithFallback.mockResolvedValue(
+      llmReply({ reply: 'Geändert.', writeContent: true, content: '1. Neu.', title: '' }),
+    )
+    const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'aendere Punkt 1' })
+    expect(res.body.wrote).toBe(true)
+    expect(res.body.resolution.content).toBe('1. Neu.')
   })
 
   it('writeContent=false laesst das Dokument unveraendert (Rueckfrage)', async () => {
@@ -115,7 +151,7 @@ describe('POST /api/resolutions/:id/chat', () => {
     chatCompletionWithFallback.mockResolvedValue(
       llmReply({ reply: 'ok', writeContent: true, content: '1. Eins.\\n\\n2. Zwei.', title: '' }),
     )
-    const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'schreib' })
+    const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'schreib', compose: true })
     expect(res.body.resolution.content).toBe('1. Eins.\n\n2. Zwei.')
   })
 })
