@@ -33,6 +33,16 @@ Dev-Login ohne Google OAuth: `DEV_LOGIN=1` in `server/.env`, dann
   `LLM_API_KEY`, Praeferenz in `LLM_MODELS`, Discovery via GET /models, per
   `LLM_BASE_URL` optional auf ein Gateway umstellbar. Kein Modellname im Code.
   Structured Output: `{reply, content, title}`.
+- **KI-Pipeline** (`server/services/ki.js`, empirisch validiert mit 21 Testfaellen):
+  Diskussions-Turns = 1 LLM-Call (schnell). Verfassen/Aktualisieren (compose=true) =
+  Composer -> Pruefagent -> Reconciliation (~45-85s, jede Stufe mit der
+  NORM-BIBLIOTHEK als verbindlichem Anker — verhindert halluzinierte
+  Norm-Einwaende und macht die Reconciliation widerspruchsfaehig gegen falsche
+  Reviewer-Einwaende). Pruef-/Reconcile-Fehler degradieren still zum Entwurf.
+  Deterministischer Rechtschreib-Retry (ae/oe/ue + ss-Hyperkorrektur "daß").
+  Beschlussdatum (`r.date`) ist User-Entscheidung und steht als "nicht zu
+  hinterfragen" im Kontext. Fortschritt: in-memory `composeStatus`-Map,
+  GET `/:id/chat/status`, Client pollt und zeigt Blur+Overlay (Editor.jsx).
 - **PDF**: pdf-lib in `server/services/pdf.js`, schlicht ohne Logo,
   Signatur-PNGs aus `server/data/signatures/` eingebettet.
 - **Drive-Ablage** (docs/adr/0001): Letzte Unterschrift laedt das PDF asynchron

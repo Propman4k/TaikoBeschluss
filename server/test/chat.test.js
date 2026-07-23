@@ -161,6 +161,70 @@ describe('POST /api/resolutions/:id/chat', () => {
     expect(chatCompletionWithFallback).not.toHaveBeenCalled()
   })
 
+  // ── Verfassen-Pipeline: Composer -> Pruefagent -> Reconciliation ──
+  it('Pipeline: Pruefagent findet Einwaende -> Reconciliation-Text landet im Beschluss', async () => {
+    const r = await freshResolution()
+    chatCompletionWithFallback
+      .mockResolvedValueOnce(llmReply({ reply: 'Entwurf.', writeContent: true, content: '1. Entwurf.', title: 'T' })) // Composer
+      .mockResolvedValueOnce(
+        llmReply({ issues: [{ severity: 'wichtig', text: 'Fehler X', fix: 'Fix X' }], verdict: 'ueberarbeiten' }),
+      ) // Pruefagent
+      .mockResolvedValueOnce(
+        llmReply({ assessments: [{ issue: 'Fehler X', accepted: true, reasoning: 'ok' }], content: '1. Final.', reply: 'Fertig.', title: 'T2' }),
+      ) // Reconciliation
+    const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ compose: true })
+    expect(res.status).toBe(200)
+    expect(chatCompletionWithFallback).toHaveBeenCalledTimes(3)
+    expect(res.body.wrote).toBe(true)
+    expect(res.body.reply).toBe('Fertig.')
+    expect(res.body.resolution.content).toBe('1. Final.')
+    expect(res.body.resolution.title).toBe('T2')
+  })
+
+  it('Pipeline: keine Einwaende -> Composer-Entwurf bleibt, keine Reconciliation', async () => {
+    const r = await freshResolution()
+    chatCompletionWithFallback
+      .mockResolvedValueOnce(llmReply({ reply: 'Entwurf.', writeContent: true, content: '1. Sauber.', title: 'T' }))
+      .mockResolvedValueOnce(llmReply({ issues: [], verdict: 'freigeben' }))
+    const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ compose: true })
+    expect(chatCompletionWithFallback).toHaveBeenCalledTimes(2)
+    expect(res.body.resolution.content).toBe('1. Sauber.')
+  })
+
+  it('Pipeline: Pruefagent kaputt -> Entwurf wird trotzdem geliefert (kein 502)', async () => {
+    const r = await freshResolution()
+    chatCompletionWithFallback
+      .mockResolvedValueOnce(llmReply({ reply: 'Entwurf.', writeContent: true, content: '1. Entwurf.', title: 'T' }))
+      .mockRejectedValue(new Error('verify kaputt'))
+    const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ compose: true })
+    expect(res.status).toBe(200)
+    expect(res.body.resolution.content).toBe('1. Entwurf.')
+  })
+
+  it('Diskussionsmodus laeuft ohne Pruefagent (genau 1 LLM-Call)', async () => {
+    const r = await freshResolution()
+    chatCompletionWithFallback.mockResolvedValue(llmReply({ reply: 'ok', writeContent: false, content: '', title: '' }))
+    await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'Frage zur Ausschuettung' })
+    expect(chatCompletionWithFallback).toHaveBeenCalledTimes(1)
+  })
+
+  it('Rechtschreib-Retry: ae/oe/ue-Antwort ohne Umlaute wird einmal neu angefordert', async () => {
+    const r = await freshResolution()
+    chatCompletionWithFallback
+      .mockResolvedValueOnce(llmReply({ reply: 'Beschluss fuer die Gesellschaft erstellt.', writeContent: false, content: '', title: '' }))
+      .mockResolvedValueOnce(llmReply({ reply: 'Beschluss für die Gesellschaft erstellt.', writeContent: false, content: '', title: '' }))
+    const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'hi' })
+    expect(chatCompletionWithFallback).toHaveBeenCalledTimes(2)
+    expect(res.body.reply).toBe('Beschluss für die Gesellschaft erstellt.')
+  })
+
+  it('Status-Endpoint: ohne laufende Pipeline stage=null', async () => {
+    const r = await freshResolution()
+    const res = await request(app).get(`/api/resolutions/${r.id}/chat/status`)
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ stage: null })
+  })
+
   it('doppelt-escapte Umbrueche im content werden normalisiert', async () => {
     const r = await freshResolution()
     chatCompletionWithFallback.mockResolvedValue(

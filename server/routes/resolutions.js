@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import { db, SIGNATURES_DIR } from '../db.js'
 import { buildFrame, normalizeContent } from '../services/beschluss.js'
 import { buildResolutionPdf, readSignatures } from '../services/pdf.js'
-import { chatCompletionWithFallback } from '../services/ai.js'
+import { runBeschlussChat } from '../services/ki.js'
 import { isPng } from '../services/png.js'
 import { notifyResolution } from '../services/push.js'
 import { uploadResolutionPdf } from '../services/drive.js'
@@ -303,32 +303,15 @@ resolutionsRouter.post('/:id/drive', async (req, res) => {
   }
 })
 
-// ── Chat: KI formuliert den variablen Beschlussteil mit ──
-const CHAT_SCHEMA = {
-  name: 'beschluss_chat',
-  schema: {
-    type: 'object',
-    properties: {
-      reply: { type: 'string', description: 'Kurze Antwort an den Nutzer im Chat (Deutsch)' },
-      writeContent: {
-        type: 'boolean',
-        description:
-          'true = das Beschlussdokument soll gesetzt/geaendert/geleert werden (content wird uebernommen). false = Dokument unveraendert lassen (z.B. wenn du nur eine Rueckfrage stellst oder plauderst).',
-      },
-      content: {
-        type: 'string',
-        description:
-          'Nur relevant wenn writeContent=true: der VOLLSTAENDIGE neue Beschlusstext (nur variabler Teil). Leerer String = Beschluss komplett leeren.',
-      },
-      title: {
-        type: 'string',
-        description: 'Kurzer Titel des Beschlusses (z.B. "Gewinnverwendung 2025"), leer wenn unveraendert',
-      },
-    },
-    required: ['reply', 'writeContent', 'content', 'title'],
-    additionalProperties: false,
-  },
-}
+// ── Chat: KI formuliert den variablen Beschlussteil mit (Pipeline in services/ki.js) ──
+
+// Fortschritt der Verfassen-Pipeline je Beschluss (in-memory, Single-Prozess).
+// Client pollt GET /:id/chat/status waehrend compose laeuft.
+const composeStatus = new Map()
+
+resolutionsRouter.get('/:id/chat/status', (req, res) => {
+  res.json(composeStatus.get(String(req.params.id)) ?? { stage: null })
+})
 
 resolutionsRouter.get('/:id/chat', (req, res) => {
   res.json(
@@ -374,92 +357,32 @@ resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
     .all()
   const byCompany = {}
   for (const row of orgRows) (byCompany[row.company] ??= []).push(row)
-  const orgLines = Object.entries(byCompany).map(([name, rows]) => {
-    const parts = rows.map((x) => {
-      const share = x.shares != null ? ` ${x.shares}%` : ''
-      const via = x.type === 'company' ? `, vertreten durch ${x.signer_name}` : ' (natuerliche Person)'
-      return `${x.name}${share}${via}`
+  const orgLines = Object.entries(byCompany)
+    .map(([name, rows]) => {
+      const parts = rows.map((x) => {
+        const share = x.shares != null ? ` ${x.shares}%` : ''
+        const via = x.type === 'company' ? `, vertreten durch ${x.signer_name}` : ' (natuerliche Person)'
+        return `${x.name}${share}${via}`
+      })
+      const gf = rows[0].managing_directors ? ` Geschäftsführung: ${rows[0].managing_directors}.` : ''
+      return `- ${name}: ${parts.join('; ')}.${gf}`
     })
-    const gf = rows[0].managing_directors ? ` Geschäftsführung: ${rows[0].managing_directors}.` : ''
-    return `- ${name}: ${parts.join('; ')}.${gf}`
-  })
-
-  const BASE = [
-    'WICHTIG — Rechtschreibung: Verwende in ALLEN Ausgaben (reply, content, title) echte deutsche Umlaute und ß: ä, ö, ü, Ä, Ö, Ü, ß. Schreibe NIEMALS Ersatzformen wie ae, oe, ue oder ss.',
-    'Du bist ein erfahrener deutscher Rechtsanwalt und Fachanwalt für Gesellschaftsrecht und Steuerrecht.',
-    'Duze den Nutzer. Antworte im Chat KNAPP und sachlich — KEINE Begrüßung, KEIN Smalltalk, KEINE Füllsätze oder Meta-Kommentare (also nicht "klingt nach einem Plan", nicht "um es rechtssicher zu formulieren"). Komm direkt zur Sache.',
-  ]
-
-  const WRITING_RULES = [
-    'Der formale Rahmen (Einleitung, Gesellschafterliste, Schlussformel, Ort/Datum, Unterschriften) wird automatisch erzeugt.',
-    'Du formulierst NUR den variablen Beschlussteil (was die Versammlung beschließt), präzise und in üblicher juristischer Sprache.',
-    'WICHTIG — Vollständigkeit: Der Beschluss muss aus sich heraus vollständig und bestimmt sein. Verweise NIEMALS auf Anlagen, Entwürfe oder beigefügte Dokumente — dieses Tool kann nichts anhängen. Alle Konditionen (Betrag, Zinssatz, Zinsfälligkeit, Laufzeit, Tilgungsrecht, Termine) gehören ausformuliert in den Beschlusstext.',
-    'Formulierungsgrundsätze: Die Gesellschafterversammlung stimmt zu, weist an, bestellt oder stellt fest — sie handelt nicht selbst für die Gesellschaft (also nicht "Die Gesellschaft gewährt ...", sondern "Dem Abschluss eines Darlehensvertrags ... wird zugestimmt. Die Geschäftsführung wird angewiesen ..."). Keine unbestimmten oder umgangssprachlichen Begriffe (nicht "flexible Tilgung", sondern "Der Darlehensnehmer ist berechtigt, das Darlehen jederzeit ganz oder teilweise zurückzuzahlen"). Kein Punkt regelt etwas, das ein anderer Punkt schon regelt.',
-    'Stil des Beschlusstexts: kurz und prägnant, keine Schachtelsätze. Gliedere immer in einzelne nummerierte Punkte (1., 2., ...) — ein Punkt pro Regelungsgegenstand, nie ein großer Textblock. Kein Markdown, reiner Text mit Absätzen.',
-    'RECHTSPRÜFUNG vor dem finalen Beschluss: Bestimme zuerst den Beschlusstyp (z.B. Darlehen an Geschäftsführer/Gesellschafter, Gewinnverwendung, Geschäftsführer-Bestellung oder -Abberufung, Entlastung, Satzungsänderung, Kapitalmaßnahme) und prüfe die für DIESEN Typ einschlägigen Normen, Formerfordernisse und üblichen Feststellungen — wie ein Fachanwalt, der das passende Muster aus seiner Bibliothek zieht. Konkret bei Rechtsgeschäften mit Geschäftsführern oder Gesellschaftern: Feststellung der Marktüblichkeit der Konditionen aufnehmen (vGA-Vorsorge) und auf ein etwaiges Stimmverbot nach § 47 Abs. 4 GmbHG in "reply" hinweisen. NUR bei Kreditgewährung an Geschäftsführer zusätzlich die Feststellung nach § 43a GmbHG aufnehmen (Kredit nicht aus dem zur Erhaltung des Stammkapitals erforderlichen Vermögen) — § 43a gilt für Kredite, nicht für sonstige Verträge wie Miete oder Kauf. Zitiere generell nur Normen, die für das konkrete Geschäft einschlägig sind. WICHTIG — keine erfundenen Tatsachen: Der Beschluss darf nur Tatsachen feststellen oder voraussetzen, die der Nutzer genannt oder bestätigt hat. Erfinde keine Paragrafen-Nummern des Gesellschaftsvertrags, keine bestehende Anteils-Stückelung, keine eingeholten Vergleichsangebote oder ähnliche Fakten — formuliere neutral ("Die Bestimmung des Gesellschaftsvertrags über X wird neu gefasst") oder frage nach. Eine Befreiung von § 181 BGB nimmst du NUR auf, wenn tatsächlich ein Insichgeschäft vorliegt (dieselbe Person steht auf beiden Seiten des Geschäfts) — und dann NUR für die konkret betroffene Person, nicht pauschal für die ganze Geschäftsführung, und nur soweit die beschließende Gesellschaft die Befreiung überhaupt erteilen kann (für die Gegenseite eines Vertrags kann sie es nicht). Echte Bedenken nennst du KNAPP in "reply".',
-    'SELBST-REVIEW, bevor du mit writeContent=true lieferst: Ist jede Angabe des Nutzers aus dem GESAMTEN Gespräch im Text abgebildet (nichts unterwegs verloren)? Ist jeder Punkt so bestimmt, dass ein Dritter ihn ohne Rückfrage vollziehen könnte? Regelt kein Punkt etwas doppelt? Würde ein Senior-Partner jede Formulierung so unterschreiben? Erst wenn alles ja: liefern.',
-    'Bei writeContent=true gibst du in "content" IMMER den vollständigen neuen Beschlusstext zurück (nicht nur die Änderung).',
-  ]
-
-  const MODE = composing
-    ? [
-        r.content
-          ? 'AKTUALISIEREN-MODUS: Der Nutzer hat auf "Aktualisieren" gedrückt. Überarbeite den bestehenden Beschlussentwurf auf Basis des GESAMTEN bisherigen Gesprächs — arbeite alle seit dem letzten Entwurf besprochenen Änderungswünsche und Klärungen ein und liefere den vollständigen neuen Text mit writeContent=true (title nur ändern, wenn es inhaltlich nicht mehr passt). Wenn der Nutzer im Gespräch den Beschluss verwerfen/leeren wollte: writeContent=true und content="". Stelle KEINE Rückfragen mehr — es sei denn, eine besprochene Änderung ist ohne fehlende Angabe nicht umsetzbar: Dann writeContent=false und nenne in "reply" KNAPP die fehlenden Punkte.'
-          : 'VERFASSEN-MODUS: Der Nutzer hat auf "Verfassen" gedrückt. Synthetisiere aus dem GESAMTEN bisherigen Gespräch (alle Fakten, Wünsche, Zwischenergebnisse und rechtlichen Klärungen) den vollständigen Beschlusstext und liefere ihn mit writeContent=true und passendem title. Stelle jetzt KEINE Rückfragen mehr — es sei denn, essentielle Angaben fehlen, ohne die der Beschluss unbestimmt wäre: Dann writeContent=false und nenne in "reply" KNAPP die fehlenden Punkte.',
-        ...WRITING_RULES,
-      ]
-    : [
-        r.content
-          ? 'DISKUSSIONS-MODUS (Entwurf vorhanden): Du schreibst in diesem Modus NIEMALS das Dokument — writeContent ist IMMER false, content bleibt leer. Du bist beratender Fachanwalt: Beantworte Fragen zum Entwurf, diskutiere und sammle Änderungswünsche, weise auf rechtliche und steuerliche Fallstricke hin. Wenn der Nutzer eine Änderung anfordert, bestätige KNAPP, was du ändern würdest, und erinnere ihn daran, dass die Änderung erst mit dem Button "Aktualisieren" in den Beschluss übernommen wird.'
-          : 'DISKUSSIONS-MODUS: Es gibt noch keinen Beschlussentwurf. In diesem Modus schreibst du NIEMALS das Dokument — writeContent ist IMMER false, content bleibt leer. Du bist beratender Fachanwalt: Beantworte Fragen, diskutiere Gestaltungsoptionen, weise proaktiv auf rechtliche und steuerliche Fallstricke hin (Formerfordernisse, notarielle Beurkundung, Stimmverbote, vGA-Risiken) und sammle die wesentlichen Eckpunkte des geplanten Beschlusses.',
-        'Wenn für den Beschluss essentielle Angaben fehlen (Beträge, Zinssatz, Laufzeit, Daten, Konditionen, Beteiligte), frage gezielt nach — GENAU EINE Frage pro Antwort im Format "Frage X: <Frage>". Beim ERSTEN Nachfragen nenne kurz die Anzahl offener Fragen. Reine Diskussionsbeiträge des Nutzers beantwortest du aber einfach, ohne eine Frage anzuhängen.',
-        `Sobald aus deiner Sicht alles Wesentliche geklärt ist, sag dem Nutzer in einem kurzen Satz, dass er über den Button "${r.content ? 'Aktualisieren' : 'Verfassen'}" den Beschluss ${r.content ? 'aktualisieren' : 'erstellen'} lassen kann.`,
-      ]
-
-  const CONTEXT = [
-    `Dein Gesprächspartner ist ${req.user.name || req.user.email} — "ich"/"mich" in Nutzer-Nachrichten meint diese Person.`,
-    `Gesellschaft: ${company.name} (Rechtsform: ${company.legal_form}), ${company.registry_court}, ${company.hrb}, Sitz: ${company.city}. Der Beschluss muss rechtlich zu dieser Rechtsform passen.`,
-    `Gesellschafter: ${shareholders.map((s) => s.name).join(', ')}.`,
-    `Beteiligungsstruktur der gesamten Firmengruppe (nutze dieses Wissen über Beteiligungen, Quoten und Verflechtungen, statt danach zu fragen):\n${orgLines.join('\n')}`,
-    `Aktueller Beschlusstext:\n${r.content || '(noch leer)'}`,
-  ]
-
-  const system = [...BASE, ...MODE, ...CONTEXT].join('\n')
+    .join('\n')
 
   try {
     db.prepare(`INSERT INTO chat_messages (resolution_id, role, content) VALUES (?, 'user', ?)`).run(r.id, text)
-    const messages = [
-      { role: 'system', content: system },
-      ...history.map((m) => ({ role: m.role, content: m.content })),
-      { role: 'user', content: text },
-    ]
-    // Bis zu 3 Versuche: faengt transiente LLM-Fehler (500/503/overload) UND
-    // ungueltiges JSON ab, bevor der Nutzer einen Fehler sieht.
-    let parsed
-    let lastErr
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const raw = await chatCompletionWithFallback({
-          messages,
-          jsonSchema: CHAT_SCHEMA,
-          userId: req.user.email,
-          generationName: 'beschluss-chat',
-        })
-        parsed = JSON.parse(raw)
-        break
-      } catch (e) {
-        lastErr = e
-        console.warn(`chat attempt ${attempt}/3 failed:`, e.message)
-      }
-    }
-    if (!parsed) throw lastErr ?? new Error('keine Antwort')
-    // Manche Modelle escapen Zeilenumbrueche doppelt ("\\n" als Literal im Text)
-    parsed.content = String(parsed.content ?? '').replace(/\\n/g, '\n')
-    parsed.reply = String(parsed.reply ?? '')
-    parsed.title = String(parsed.title ?? '')
-    // Geschrieben wird AUSSCHLIESSLICH ueber den Verfassen/Aktualisieren-Button
-    // (compose=true) — deterministisch, egal was das Modell liefert.
-    if (!composing) parsed.writeContent = false
+    const parsed = await runBeschlussChat({
+      company,
+      shareholders,
+      orgLines,
+      resolution: r,
+      userName: req.user.name || req.user.email,
+      userId: req.user.email,
+      history,
+      text,
+      composing,
+      onStage: (stage, extra) => composeStatus.set(String(r.id), { stage, ...extra }),
+    })
     db.prepare(
       `INSERT INTO chat_messages (resolution_id, role, content, wrote) VALUES (?, 'assistant', ?, ?)`,
     ).run(r.id, parsed.reply, parsed.writeContent ? 1 : 0)
@@ -478,5 +401,7 @@ resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
   } catch (err) {
     console.error('chat failed:', err.message)
     res.status(502).json({ error: 'KI-Anfrage fehlgeschlagen. Bitte erneut versuchen.' })
+  } finally {
+    composeStatus.delete(String(r.id))
   }
 })

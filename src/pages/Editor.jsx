@@ -1,9 +1,116 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Send, FileDown, PenLine, Check, Pencil, Loader2, Sparkles } from 'lucide-react'
+import { ArrowLeft, Send, FileDown, PenLine, Check, Pencil, Loader2, Sparkles, Scale, ClipboardCheck } from 'lucide-react'
 import { api, fmtDate } from '../api.js'
 import { useToast } from '../components/Toast.jsx'
 import SignatureModal from '../components/SignatureModal.jsx'
 import { PAGE, usePagination } from '../usePagination.js'
+
+// Stufen der Verfassen-Pipeline (Server: services/ki.js). Die Detail-Zeilen
+// rotieren client-seitig und beschreiben, was die jeweilige Stufe wirklich prueft.
+const COMPOSE_STEPS = [
+  {
+    key: 'verfassen',
+    label: 'Entwurf verfassen',
+    icon: PenLine,
+    details: [
+      'Beschlusstyp bestimmen …',
+      'Einschlägige Normen heranziehen …',
+      'Beschlusspunkte formulieren …',
+      'Erforderliche Feststellungen ergänzen …',
+      'Angaben aus dem Gespräch abgleichen …',
+    ],
+  },
+  {
+    key: 'pruefen',
+    label: 'Juristische Gegenprüfung',
+    icon: Scale,
+    details: [
+      'Formerfordernisse prüfen (Beurkundung, Handelsregister) …',
+      'Stimmverbote prüfen (§ 47 Abs. 4 GmbHG) …',
+      'Kapitalerhaltung prüfen (§§ 30, 43a GmbHG) …',
+      'Steuerliche Risiken prüfen (vGA, Fremdvergleich) …',
+      'Insichgeschäfte prüfen (§ 181 BGB) …',
+      'Bestimmtheit jedes Beschlusspunkts prüfen …',
+      'Vollständigkeit gegen das Gespräch prüfen …',
+    ],
+  },
+  {
+    key: 'einarbeiten',
+    label: 'Prüfergebnisse einarbeiten',
+    icon: ClipboardCheck,
+    details: [
+      'Jeden Einwand am Gesetz bewerten …',
+      'Berechtigte Einwände einarbeiten …',
+      'Unbegründete Einwände verwerfen …',
+      'Finalen Beschlusstext erstellen …',
+    ],
+  },
+]
+
+// Overlay ueber dem Dokument, solange die Verfassen-Pipeline laeuft.
+function ComposeOverlay({ status }) {
+  const activeIdx = Math.max(0, COMPOSE_STEPS.findIndex((s) => s.key === status.stage))
+  const [tick, setTick] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), 3000)
+    return () => clearInterval(t)
+  }, [])
+  return (
+    <div className="absolute inset-0 z-20 flex items-center justify-center">
+      <div className="w-[400px] bg-white/95 backdrop-blur rounded-2xl shadow-elevated border border-border p-7">
+        <div className="flex items-center gap-3 pb-5">
+          <span className="relative flex h-9 w-9 items-center justify-center">
+            <span className="absolute inline-flex h-full w-full rounded-full bg-brand/20 animate-ping" />
+            <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-brand text-white">
+              <Sparkles size={16} />
+            </span>
+          </span>
+          <div>
+            <div className="font-semibold text-sm">Beschluss wird erstellt</div>
+            <div className="text-xs text-text-muted">Verfassen, Gegenprüfung und Überarbeitung laufen automatisch</div>
+          </div>
+        </div>
+        <div className="space-y-4">
+          {COMPOSE_STEPS.map((step, i) => {
+            const state = i < activeIdx ? 'done' : i === activeIdx ? 'active' : 'pending'
+            const Icon = step.icon
+            return (
+              <div key={step.key} className={`flex gap-3 ${state === 'pending' ? 'opacity-40' : ''}`}>
+                <div className="w-5 pt-0.5 shrink-0">
+                  {state === 'done' ? (
+                    <Check size={16} className="text-emerald-600" />
+                  ) : state === 'active' ? (
+                    <Loader2 size={16} className="animate-spin text-brand" />
+                  ) : (
+                    <Icon size={15} className="text-text-light" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <div className={`text-sm font-medium ${state === 'active' ? 'text-text' : 'text-text-muted'}`}>
+                    {step.label}
+                    {step.key === 'einarbeiten' && status.issues > 0 && state !== 'pending' && (
+                      <span className="ml-2 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                        {status.issues} {status.issues === 1 ? 'Hinweis' : 'Hinweise'}
+                      </span>
+                    )}
+                  </div>
+                  {state === 'active' && (
+                    <div key={tick % step.details.length} className="text-xs text-text-muted mt-0.5 animate-fade-in">
+                      {step.details[tick % step.details.length]}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        <div className="pt-5 text-[11px] text-text-light">
+          Dauert etwa eine Minute — der Entwurf wird wie in einer Kanzlei erst verfasst und dann gegengeprüft.
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function Editor({ id }) {
   const [r, setR] = useState(null)
@@ -12,12 +119,34 @@ export default function Editor({ id }) {
   const [sending, setSending] = useState(false)
   const [editingContent, setEditingContent] = useState(null)
   const [signingFor, setSigningFor] = useState(null)
+  const [composeStatus, setComposeStatus] = useState(null)
   const chatEndRef = useRef(null)
+  const pollRef = useRef(null)
   const toast = useToast()
 
   useEffect(() => {
     api.get(`/api/resolutions/${id}`).then(setR).catch((e) => toast(e.message, 'error'))
     api.get(`/api/resolutions/${id}/chat`).then(setChat).catch(() => {})
+    // Laeuft serverseitig noch eine Verfassen-Pipeline (z.B. nach Reload)?
+    // Dann Overlay zeigen und nach Abschluss Beschluss + Chat neu laden.
+    api
+      .get(`/api/resolutions/${id}/chat/status`)
+      .then((s) => {
+        if (!s.stage) return
+        setComposeStatus(s)
+        pollRef.current = setInterval(async () => {
+          try {
+            const cur = await api.get(`/api/resolutions/${id}/chat/status`)
+            if (cur.stage) return setComposeStatus(cur)
+            clearInterval(pollRef.current)
+            setComposeStatus(null)
+            setR(await api.get(`/api/resolutions/${id}`))
+            setChat(await api.get(`/api/resolutions/${id}/chat`))
+          } catch {} // eslint-disable-line no-empty
+        }, 1500)
+      })
+      .catch(() => {})
+    return () => clearInterval(pollRef.current)
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -48,14 +177,28 @@ export default function Editor({ id }) {
 
   // Verfassen/Aktualisieren: NUR hierueber wird das Dokument geschrieben —
   // Chat-Nachrichten sind immer reine Diskussion (Server erzwingt das).
+  // Waehrend die Pipeline laeuft (~1 Minute), zeigt das Overlay den Fortschritt
+  // (Status-Polling gegen /chat/status).
   async function compose() {
     if (sending) return
-    await chatTurn(
-      { compose: true },
-      r.content
-        ? 'Bitte aktualisiere den Beschluss auf Basis unseres Gesprächs.'
-        : 'Bitte verfasse jetzt den Beschluss auf Basis unseres Gesprächs.',
-    )
+    setComposeStatus({ stage: 'verfassen' })
+    pollRef.current = setInterval(() => {
+      api
+        .get(`/api/resolutions/${id}/chat/status`)
+        .then((s) => s.stage && setComposeStatus(s))
+        .catch(() => {})
+    }, 1500)
+    try {
+      await chatTurn(
+        { compose: true },
+        r.content
+          ? 'Bitte aktualisiere den Beschluss auf Basis unseres Gesprächs.'
+          : 'Bitte verfasse jetzt den Beschluss auf Basis unseres Gesprächs.',
+      )
+    } finally {
+      clearInterval(pollRef.current)
+      setComposeStatus(null)
+    }
   }
 
   async function patch(fields) {
@@ -340,7 +483,13 @@ export default function Editor({ id }) {
       </div>
 
       {/* ── Rechts: Beschluss als A4-Seiten ── */}
-      <div className="flex-1 min-w-0 overflow-y-auto">
+      <div className="flex-1 min-w-0 relative">
+        {!!composeStatus && <ComposeOverlay status={composeStatus} />}
+        <div
+          className={`h-full overflow-y-auto transition-all duration-500 ${
+            composeStatus ? 'blur-[5px] opacity-50 pointer-events-none select-none' : ''
+          }`}
+        >
         <div className="sticky top-0 z-10 flex items-center gap-3 px-6 h-16 bg-surface-raised/95 backdrop-blur border-b border-border">
           <input
             type="date"
@@ -407,6 +556,7 @@ export default function Editor({ id }) {
               </div>
             ))}
           </div>
+        </div>
         </div>
       </div>
 
