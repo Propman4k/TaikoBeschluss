@@ -45,10 +45,12 @@ async function ensureCompanyFolder(company) {
   if (company.drive_folder_id) return company.drive_folder_id
   const root = process.env.DRIVE_ROOT_FOLDER_ID
   const q = `'${root}' in parents and name = '${company.name.replaceAll("'", "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
-  const found = await driveFetch(`${API}/files?q=${encodeURIComponent(q)}&fields=files(id)`)
+  const found = await driveFetch(
+    `${API}/files?q=${encodeURIComponent(q)}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+  )
   let id = found.files?.[0]?.id
   if (!id) {
-    const created = await driveFetch(`${API}/files?fields=id`, {
+    const created = await driveFetch(`${API}/files?fields=id&supportsAllDrives=true`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -95,7 +97,7 @@ export async function uploadResolutionPdf(resolutionId) {
   const name = r.title ? `${r.number} – ${r.title}.pdf` : `${r.number}.pdf`
   const boundary = 'taikobeschluss-pdf'
   const upload = (url, method, metadata) =>
-    driveFetch(`${url}?uploadType=multipart&fields=id,webViewLink`, {
+    driveFetch(`${url}?uploadType=multipart&fields=id,webViewLink&supportsAllDrives=true`, {
       method,
       headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
       body: multipartBody(metadata, pdf, boundary),

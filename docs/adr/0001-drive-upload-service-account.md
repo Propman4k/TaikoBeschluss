@@ -1,7 +1,7 @@
 # 0001 — Drive-Upload über Service Account
 
 Datum: 2026-07-23
-Status: akzeptiert
+Status: akzeptiert (revidiert am selben Tag: Ziel muss eine Geteilte Ablage sein)
 
 ## Kontext
 
@@ -20,24 +20,31 @@ Geprüfte Alternativen:
 
 ## Entscheidung
 
-Service Account (Variante 1). Der Beschluss-Ordner wird mit der SA-E-Mail
-als Editor geteilt; Ordner-ID kommt aus der ENV.
+Service Account (Variante 1), Ziel-Ordner in einer **Geteilten Ablage**
+(Shared Drive), SA als Inhaltsverwalter; Ordner-ID kommt aus der ENV.
+
+Ursprünglich war ein normaler "Meine Ablage"-Ordner geplant (Variante 1 pur).
+Das scheiterte im ersten Live-Test am 2026-07-23 hart: Google gibt Service
+Accounts inzwischen **null eigene Speicher-Quota** ("Service Accounts do not
+have storage quota", 403 beim Anlegen) — ein SA kann in "Meine Ablage" keine
+Dateien mehr besitzen, auch nicht in einem mit ihm geteilten Ordner. Damit
+blieb von Variante 1 nur die Kombination mit Variante 3.
 
 ## Begründung
 
 - Läuft headless auf der NAS, kein Token-Refresh, das still brechen kann
   (Google invalidiert User-Refresh-Tokens u.a. bei Passwortwechsel).
 - Kein Consent-Flow, keine sensiblen Scopes am User-Account.
-- Shared Drive wäre quota-technisch sauberer, erfordert aber Umzug des
-  bestehenden Ordners und ändert dessen URL.
+- Gegen Domain-wide Delegation (die zweite Rettung fürs "Meine Ablage"-Ziel):
+  gilt technisch für alle Drives der Domain — zu breiter Hebel für ein Tool.
 
 ## Konsequenzen
 
-- Hochgeladene Dateien gehören dem Service Account und zählen gegen dessen
-  eigene 15-GB-Quota. Für Beschluss-PDFs (wenige hundert KB) auf Jahre
-  irrelevant — wird die Quota je erreicht, ist der Umzug auf ein Shared
-  Drive (Variante 3) der Upgrade-Pfad.
-- Einmalige Einrichtung nötig: SA im Google-Cloud-Projekt anlegen,
-  JSON-Key als ENV bereitstellen, Ordner mit SA-E-Mail teilen.
-- Löschen/Verschieben der Dateien in Drive kann nur der SA (oder ein
-  Drive-Admin über die Ordnerfreigabe).
+- Der Beschluss-Ordner liegt in einer Geteilten Ablage; die ursprüngliche
+  "Meine Ablage"-URL gilt nicht mehr. Dateien gehören der Ablage, nicht
+  einer Person — kein Quota-Thema, Team-Zugriff über Ablage-Mitgliedschaft.
+- Alle Drive-API-Calls brauchen `supportsAllDrives=true` (Suche zusätzlich
+  `includeItemsFromAllDrives=true`).
+- Einmalige Einrichtung nötig: SA im Google-Cloud-Projekt anlegen, Drive API
+  aktivieren, JSON-Key als ENV bereitstellen, SA als Inhaltsverwalter der
+  Geteilten Ablage hinzufügen.
