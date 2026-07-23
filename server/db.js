@@ -133,6 +133,10 @@ for (const ddl of [
   'ALTER TABLE shareholders ADD COLUMN position INTEGER NOT NULL DEFAULT 0',
   // Beteiligungsquote in Prozent je Gesellschaft+Gesellschafter (NULL = nicht erfasst)
   'ALTER TABLE company_shareholders ADD COLUMN shares REAL',
+  // Drive-Ablage: Ordner je Firma, Datei + Link je Beschluss (siehe docs/adr/0001)
+  'ALTER TABLE companies ADD COLUMN drive_folder_id TEXT',
+  'ALTER TABLE resolutions ADD COLUMN drive_file_id TEXT',
+  'ALTER TABLE resolutions ADD COLUMN drive_link TEXT',
 ]) {
   try {
     db.exec(ddl)

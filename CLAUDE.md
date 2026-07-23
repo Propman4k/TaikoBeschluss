@@ -35,6 +35,14 @@ Dev-Login ohne Google OAuth: `DEV_LOGIN=1` in `server/.env`, dann
   Structured Output: `{reply, content, title}`.
 - **PDF**: pdf-lib in `server/services/pdf.js`, schlicht ohne Logo,
   Signatur-PNGs aus `server/data/signatures/` eingebettet.
+- **Drive-Ablage** (docs/adr/0001): Letzte Unterschrift laedt das PDF asynchron
+  nach Google Drive (`server/services/drive.js`, Service Account, REST per
+  fetch). Unterordner je Firma (`companies.drive_folder_id`), Datei wird bei
+  Aenderung ueberschrieben (`resolutions.drive_file_id`/`drive_link`).
+  POST `/api/resolutions/:id/drive` = manueller Retry/Backfill (Button in der
+  Abgeschlossen-Liste). ENV: `DRIVE_ROOT_FOLDER_ID` +
+  `GOOGLE_APPLICATION_CREDENTIALS` (Pfad zum SA-Key) oder `GOOGLE_SA_KEY`
+  (JSON inline).
 - **SignatureModal** 1:1 aus TaikoEat uebernommen.
 
 ## Offen / spaeter

@@ -261,6 +261,29 @@ describe('TaikoBeschluss API', () => {
     expect(list.indexOf(a.body.id)).toBeLessThan(list.indexOf(b.body.id))
   })
 
+  it('Drive-Ablage: 409 solange nicht vollstaendig unterschrieben, 502 ohne Drive-Konfig', async () => {
+    const sh = await request(app)
+      .post('/api/shareholders')
+      .send({ name: 'Drive GmbH', signer_name: 'Dora Drive', signer_email: 'dd@example.com' })
+    const co = await request(app)
+      .post('/api/companies')
+      .send({ name: 'Drivetest GmbH', shareholder_ids: [sh.body.id] })
+    const r = await request(app).post('/api/resolutions').send({ company_id: co.body.id })
+    await request(app).patch(`/api/resolutions/${r.body.id}`).send({ content: 'Inhalt.' })
+
+    // Entwurf und freigegeben-aber-offen -> 409
+    expect((await request(app).post(`/api/resolutions/${r.body.id}/drive`)).status).toBe(409)
+    await request(app).post(`/api/resolutions/${r.body.id}/release`)
+    expect((await request(app).post(`/api/resolutions/${r.body.id}/drive`)).status).toBe(409)
+
+    // Vollstaendig unterschrieben, aber Drive-ENV fehlt im Test -> 502
+    await request(app)
+      .post(`/api/resolutions/${r.body.id}/sign/${sh.body.id}`)
+      .set('Content-Type', 'image/png')
+      .send(PNG)
+    expect((await request(app).post(`/api/resolutions/${r.body.id}/drive`)).status).toBe(502)
+  })
+
   it('Standard-Unterschrift: kein PNG -> 400', async () => {
     const sh = await request(app)
       .post('/api/shareholders')

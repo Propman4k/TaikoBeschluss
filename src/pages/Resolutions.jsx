@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Plus, CheckCircle2, CircleDashed, Trash2, ChevronRight, ChevronDown, Check } from 'lucide-react'
+import { Plus, CheckCircle2, CircleDashed, Trash2, ChevronRight, ChevronDown, Check, ExternalLink, CloudUpload } from 'lucide-react'
 import { api, fmtDate } from '../api.js'
 import { useToast } from '../components/Toast.jsx'
 
@@ -28,8 +28,43 @@ function StatusBadge({ r }) {
 // Spaltenraster: Titel | Gesellschaft | Erstellt am | Status (rechtsbuendig)
 const GRID = 'grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.6fr)_minmax(0,1fr)_160px] items-center gap-4'
 
+// Drive-Ablage (nur abgeschlossene Beschluesse): Link auf das PDF in Drive,
+// oder "Nach Drive" als Retry/Backfill, wenn der Upload (noch) fehlt.
+function DriveButton({ r, onUpload }) {
+  const [busy, setBusy] = useState(false)
+  if (r.drive_link)
+    return (
+      <a
+        href={r.drive_link}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-[6px] hover:bg-slate-50 transition-colors"
+        title="PDF in Google Drive öffnen"
+      >
+        <ExternalLink size={13} /> Drive
+      </a>
+    )
+  return (
+    <button
+      onClick={async () => {
+        setBusy(true)
+        try {
+          await onUpload(r)
+        } finally {
+          setBusy(false)
+        }
+      }}
+      disabled={busy}
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-[6px] hover:bg-slate-50 disabled:opacity-50 transition-colors cursor-pointer"
+      title="PDF nach Google Drive hochladen"
+    >
+      <CloudUpload size={13} /> {busy ? 'Lädt…' : 'Nach Drive'}
+    </button>
+  )
+}
+
 // Einzeiliges Listenelement (eigene Card pro Beschluss, wie TaikoTasks)
-function Row({ r, onDelete }) {
+function Row({ r, onDelete, onUpload }) {
   return (
     <div className="group flex items-center gap-4 bg-surface rounded-[10px] shadow-card border border-border px-5 py-4 hover:border-brand/30 transition-colors">
       <a href={`#/beschluss/${r.id}`} className={`flex-1 min-w-0 ${GRID}`}>
@@ -41,6 +76,7 @@ function Row({ r, onDelete }) {
           <StatusBadge r={r} />
         </div>
       </a>
+      {!!onUpload && <DriveButton r={r} onUpload={onUpload} />}
       {!!onDelete && (
         <button
           onClick={() => onDelete(r)}
@@ -58,11 +94,11 @@ function Row({ r, onDelete }) {
   )
 }
 
-function List({ items, onDelete }) {
+function List({ items, onDelete, onUpload }) {
   return (
     <div className="space-y-2">
       {items.map((r) => (
-        <Row key={r.id} r={r} onDelete={onDelete} />
+        <Row key={r.id} r={r} onDelete={onDelete} onUpload={onUpload} />
       ))}
     </div>
   )
@@ -134,6 +170,16 @@ export default function Resolutions({ view = 'offen' }) {
     try {
       const r = await api.post('/api/resolutions', { company_id: companyId })
       window.location.hash = `#/beschluss/${r.id}`
+    } catch (err) {
+      toast(err.message, 'error')
+    }
+  }
+
+  async function uploadDrive(r) {
+    try {
+      await api.post(`/api/resolutions/${r.id}/drive`)
+      load()
+      toast('PDF in Drive abgelegt')
     } catch (err) {
       toast(err.message, 'error')
     }
@@ -218,7 +264,7 @@ export default function Resolutions({ view = 'offen' }) {
           {simpleList.length === 0 ? (
             emptyBox(EMPTY[view])
           ) : (
-            <List items={simpleList} onDelete={del} />
+            <List items={simpleList} onDelete={del} onUpload={view === 'abgeschlossen' ? uploadDrive : null} />
           )}
         </>
       )}

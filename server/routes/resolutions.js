@@ -8,6 +8,7 @@ import { buildResolutionPdf, readSignatures } from '../services/pdf.js'
 import { chatCompletionWithFallback } from '../services/ai.js'
 import { isPng } from '../services/png.js'
 import { notifyResolution } from '../services/push.js'
+import { uploadResolutionPdf } from '../services/drive.js'
 
 export const resolutionsRouter = Router()
 
@@ -32,6 +33,18 @@ const shareholdersOf = (companyId) =>
        WHERE cs.company_id = ? ORDER BY cs.position`,
     )
     .all(companyId)
+const openSignatures = (resolutionId) =>
+  db
+    .prepare(
+      'SELECT COUNT(*) AS n FROM resolution_signatures WHERE resolution_id = ? AND signature_path IS NULL',
+    )
+    .get(resolutionId).n
+// Drive-Ablage asynchron und nie blockierend — Fehlschlag laesst nur den
+// Drive-Link weg, der "Nach Drive"-Button in der Liste ist der Retry.
+const uploadToDrive = (resolutionId) =>
+  uploadResolutionPdf(resolutionId).catch((err) =>
+    console.error(`Drive-Upload fuer Beschluss ${resolutionId} fehlgeschlagen:`, err.message),
+  )
 const signaturesOf = (resolutionId) =>
   db
     .prepare(
@@ -137,6 +150,9 @@ resolutionsRouter.patch('/:id', (req, res) => {
   db.prepare(
     `UPDATE resolutions SET title = ?, content = ?, date = ?, updated_at = datetime('now') WHERE id = ?`,
   ).run(title, content, date, r.id)
+  // Nachbearbeitung eines bereits abgelegten, vollstaendig unterschriebenen
+  // Beschlusses -> Drive-PDF ueberschreiben (Link bleibt stabil, ADR 0001)
+  if (r.drive_file_id && r.status === 'freigegeben' && openSignatures(r.id) === 0) uploadToDrive(r.id)
   res.json(fullResolution(db.prepare('SELECT * FROM resolutions WHERE id = ?').get(r.id)))
 })
 
@@ -223,11 +239,7 @@ resolutionsRouter.post('/:id/sign/:shareholderId', (req, res) => {
     const shName = db
       .prepare('SELECT name FROM shareholders WHERE id = ?')
       .get(req.params.shareholderId)?.name
-    const open = db
-      .prepare(
-        'SELECT COUNT(*) AS n FROM resolution_signatures WHERE resolution_id = ? AND signature_path IS NULL',
-      )
-      .get(r0.id).n
+    const open = openSignatures(r0.id)
     // Letzte Unterschrift -> nur die "vollstaendig"-Meldung (nicht beide)
     notifyResolution(
       r0.id,
@@ -236,6 +248,8 @@ resolutionsRouter.post('/:id/sign/:shareholderId', (req, res) => {
         : { title: `${shName} hat unterschrieben`, body: `${companyOf(r0).name}: ${r0.title || r0.number}` },
       req.user.id,
     )
+    // Abgeschlossen (letzte Unterschrift) -> PDF in die Drive-Ablage
+    if (open === 0) uploadToDrive(r0.id)
   }
   const r = db.prepare('SELECT * FROM resolutions WHERE id = ?').get(req.params.id)
   res.json(fullResolution(r))
@@ -268,6 +282,25 @@ resolutionsRouter.get('/:id/pdf', async (req, res) => {
     .type('application/pdf')
     .set('Content-Disposition', `inline; filename="Gesellschafterbeschluss-${slug}-${r.number}.pdf"`)
     .send(pdf)
+})
+
+// ── Drive-Ablage manuell anstossen: Retry nach Fehlschlag + Backfill fuer
+// Alt-Beschluesse. Nur fuer abgeschlossene (vollstaendig unterschriebene). ──
+resolutionsRouter.post('/:id/drive', async (req, res) => {
+  const r = activeResolution(req.params.id)
+  if (!r) return res.status(404).json({ error: 'nicht gefunden' })
+  const total = db
+    .prepare('SELECT COUNT(*) AS n FROM resolution_signatures WHERE resolution_id = ?')
+    .get(r.id).n
+  if (r.status !== 'freigegeben' || total === 0 || openSignatures(r.id) > 0)
+    return res.status(409).json({ error: 'Beschluss ist noch nicht vollständig unterschrieben' })
+  try {
+    await uploadResolutionPdf(r.id)
+    res.json(fullResolution(db.prepare('SELECT * FROM resolutions WHERE id = ?').get(r.id)))
+  } catch (err) {
+    console.error(`Drive-Upload fuer Beschluss ${r.id} fehlgeschlagen:`, err.message)
+    res.status(502).json({ error: 'Drive-Upload fehlgeschlagen. Bitte erneut versuchen.' })
+  }
 })
 
 // ── Chat: KI formuliert den variablen Beschlussteil mit ──
