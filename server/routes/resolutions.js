@@ -320,6 +320,28 @@ resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
     .prepare('SELECT role, content FROM chat_messages WHERE resolution_id = ? ORDER BY id')
     .all(r.id)
 
+  // Gesamte Beteiligungsstruktur als Kontext, damit die KI Verflechtungen
+  // (z.B. wer hinter einer Beteiligungs-GmbH steht) kennt statt nachzufragen.
+  const orgRows = db
+    .prepare(
+      `SELECT c.name AS company, s.name, s.type, s.signer_name, cs.shares
+       FROM company_shareholders cs
+       JOIN companies c ON c.id = cs.company_id
+       JOIN shareholders s ON s.id = cs.shareholder_id
+       ORDER BY c.position, c.id, cs.position`,
+    )
+    .all()
+  const byCompany = {}
+  for (const row of orgRows) (byCompany[row.company] ??= []).push(row)
+  const orgLines = Object.entries(byCompany).map(([name, rows]) => {
+    const parts = rows.map((x) => {
+      const share = x.shares != null ? ` ${x.shares}%` : ''
+      const via = x.type === 'company' ? `, vertreten durch ${x.signer_name}` : ' (natuerliche Person)'
+      return `${x.name}${share}${via}`
+    })
+    return `- ${name}: ${parts.join('; ')}`
+  })
+
   const system = [
     'WICHTIG — Rechtschreibung: Verwende in ALLEN Ausgaben (reply, content, title) echte deutsche Umlaute und ß: ä, ö, ü, Ä, Ö, Ü, ß. Schreibe NIEMALS Ersatzformen wie ae, oe, ue oder ss.',
     'Du bist ein erfahrener deutscher Rechtsanwalt und Fachanwalt für Gesellschaftsrecht und Steuerrecht.',
@@ -334,6 +356,7 @@ resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
     'Wenn der Nutzer den Beschluss leeren/verwerfen will ("nimm alles weg", "lösche", "fang neu an"): writeContent=true und content="" (leerer String). NUR so wird das Dokument tatsächlich geleert.',
     `Gesellschaft: ${company.name} (Rechtsform: ${company.legal_form}), ${company.registry_court}, ${company.hrb}, Sitz: ${company.city}. Formuliere den Beschluss rechtlich passend zu dieser Rechtsform.`,
     `Gesellschafter: ${shareholders.map((s) => s.name).join(', ')}.`,
+    `Beteiligungsstruktur der gesamten Firmengruppe (nutze dieses Wissen über Beteiligungen, Quoten und Verflechtungen, statt danach zu fragen):\n${orgLines.join('\n')}`,
     `Aktueller Beschlusstext:\n${r.content || '(noch leer)'}`,
     'Bei writeContent=true gibst du in "content" IMMER den vollständigen neuen Beschlusstext zurück (nicht nur die Änderung).',
   ].join('\n')
