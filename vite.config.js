@@ -4,6 +4,10 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // Build-Zeitpunkt ins Bundle backen (Anzeige unten in der Sidebar)
+  define: {
+    'import.meta.env.VITE_BUILD_TIME': JSON.stringify(new Date().toISOString()),
+  },
   server: {
     port: 3009,
     proxy: {

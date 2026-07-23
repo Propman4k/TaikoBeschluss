@@ -190,7 +190,18 @@ export default function Sidebar({ route, user, counts = {}, mobileOpen, onClose 
         <StrukturGroup route={route} />
       </div>
       <div className="px-3 py-4 border-t border-border">
-        <div className="px-3 pb-2 text-xs text-text-muted truncate">{user.name || user.email}</div>
+        <div className="px-3 text-xs text-text-muted truncate">{user.name || user.email}</div>
+        <div className="px-3 pb-2 text-[10px] text-slate-400">
+          Build{' '}
+          {new Date(import.meta.env.VITE_BUILD_TIME).toLocaleString('de-DE', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })}{' '}
+          Uhr
+        </div>
         <PushBell />
         <a href="/api/auth/logout" className={`${itemBase} ${itemIdle}`}>
           <LogOut size={16} strokeWidth={2} /> Abmelden
