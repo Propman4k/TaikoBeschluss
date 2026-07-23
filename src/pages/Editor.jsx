@@ -46,10 +46,16 @@ export default function Editor({ id }) {
     await chatTurn({ message: text }, text)
   }
 
-  // Verfassen: Diskussion beenden, Entwurf aus dem gesamten Gespraech erstellen
+  // Verfassen/Aktualisieren: NUR hierueber wird das Dokument geschrieben —
+  // Chat-Nachrichten sind immer reine Diskussion (Server erzwingt das).
   async function compose() {
     if (sending) return
-    await chatTurn({ compose: true }, 'Bitte verfasse jetzt den Beschluss auf Basis unseres Gesprächs.')
+    await chatTurn(
+      { compose: true },
+      r.content
+        ? 'Bitte aktualisiere den Beschluss auf Basis unseres Gesprächs.'
+        : 'Bitte verfasse jetzt den Beschluss auf Basis unseres Gesprächs.',
+    )
   }
 
   async function patch(fields) {
@@ -297,14 +303,14 @@ export default function Editor({ id }) {
         </div>
 
         <form onSubmit={send} className="p-3 border-t border-border">
-          {!r.content && chat.length > 0 && (
+          {chat.length > 0 && (
             <button
               type="button"
               onClick={compose}
               disabled={sending}
               className="w-full mb-2 inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-brand border border-brand/40 rounded-[8px] hover:bg-blue-50 disabled:opacity-40 transition-colors cursor-pointer"
             >
-              <Sparkles size={15} /> Beschluss verfassen
+              <Sparkles size={15} /> {r.content ? 'Beschluss aktualisieren' : 'Beschluss verfassen'}
             </button>
           )}
           <div className="flex items-end gap-2">

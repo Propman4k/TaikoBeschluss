@@ -316,7 +316,10 @@ resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
   // Nachbearbeitung (Entwurf existiert — Aenderungswuensche wirken direkt).
   const composing = req.body.compose === true
   let text = String(req.body.message ?? '').trim()
-  if (!text && composing) text = 'Bitte verfasse jetzt den Beschluss auf Basis unseres Gesprächs.'
+  if (!text && composing)
+    text = r.content
+      ? 'Bitte aktualisiere den Beschluss auf Basis unseres Gesprächs.'
+      : 'Bitte verfasse jetzt den Beschluss auf Basis unseres Gesprächs.'
   if (!text) return res.status(400).json({ error: 'Nachricht fehlt' })
 
   const company = companyOf(r)
@@ -367,19 +370,18 @@ resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
 
   const MODE = composing
     ? [
-        'VERFASSEN-MODUS: Der Nutzer hat auf "Verfassen" gedrückt. Synthetisiere aus dem GESAMTEN bisherigen Gespräch (alle Fakten, Wünsche, Zwischenergebnisse und rechtlichen Klärungen) den vollständigen Beschlusstext und liefere ihn mit writeContent=true und passendem title. Stelle jetzt KEINE Rückfragen mehr — es sei denn, essentielle Angaben fehlen, ohne die der Beschluss unbestimmt wäre: Dann writeContent=false und nenne in "reply" KNAPP die fehlenden Punkte.',
+        r.content
+          ? 'AKTUALISIEREN-MODUS: Der Nutzer hat auf "Aktualisieren" gedrückt. Überarbeite den bestehenden Beschlussentwurf auf Basis des GESAMTEN bisherigen Gesprächs — arbeite alle seit dem letzten Entwurf besprochenen Änderungswünsche und Klärungen ein und liefere den vollständigen neuen Text mit writeContent=true (title nur ändern, wenn es inhaltlich nicht mehr passt). Wenn der Nutzer im Gespräch den Beschluss verwerfen/leeren wollte: writeContent=true und content="". Stelle KEINE Rückfragen mehr — es sei denn, eine besprochene Änderung ist ohne fehlende Angabe nicht umsetzbar: Dann writeContent=false und nenne in "reply" KNAPP die fehlenden Punkte.'
+          : 'VERFASSEN-MODUS: Der Nutzer hat auf "Verfassen" gedrückt. Synthetisiere aus dem GESAMTEN bisherigen Gespräch (alle Fakten, Wünsche, Zwischenergebnisse und rechtlichen Klärungen) den vollständigen Beschlusstext und liefere ihn mit writeContent=true und passendem title. Stelle jetzt KEINE Rückfragen mehr — es sei denn, essentielle Angaben fehlen, ohne die der Beschluss unbestimmt wäre: Dann writeContent=false und nenne in "reply" KNAPP die fehlenden Punkte.',
         ...WRITING_RULES,
       ]
-    : r.content
-      ? [
-          'NACHBEARBEITUNGS-MODUS: Es existiert bereits ein Beschlussentwurf. Konkrete Änderungswünsche setzt du direkt um (writeContent=true, vollständiger neuer Text). Fragen, Diskussion oder Rückversicherung beantwortest du als beratender Fachanwalt, OHNE das Dokument zu ändern (writeContent=false). Wenn der Nutzer den Beschluss leeren/verwerfen will ("nimm alles weg", "lösche", "fang neu an"): writeContent=true und content="" (leerer String).',
-          ...WRITING_RULES,
-        ]
-      : [
-          'DISKUSSIONS-MODUS: Es gibt noch keinen Beschlussentwurf. In diesem Modus schreibst du NIEMALS das Dokument — writeContent ist IMMER false, content bleibt leer. Du bist beratender Fachanwalt: Beantworte Fragen, diskutiere Gestaltungsoptionen, weise proaktiv auf rechtliche und steuerliche Fallstricke hin (Formerfordernisse, notarielle Beurkundung, Stimmverbote, vGA-Risiken) und sammle die wesentlichen Eckpunkte des geplanten Beschlusses.',
-          'Wenn für den späteren Beschluss essentielle Angaben fehlen (Beträge, Zinssatz, Laufzeit, Daten, Konditionen, Beteiligte), frage gezielt nach — GENAU EINE Frage pro Antwort im Format "Frage X: <Frage>". Beim ERSTEN Nachfragen nenne kurz die Anzahl offener Fragen. Reine Diskussionsbeiträge des Nutzers beantwortest du aber einfach, ohne eine Frage anzuhängen.',
-          'Sobald aus deiner Sicht alles Wesentliche geklärt ist, sag dem Nutzer in einem kurzen Satz, dass er den Entwurf jetzt über den Button "Verfassen" erstellen lassen kann.',
-        ]
+    : [
+        r.content
+          ? 'DISKUSSIONS-MODUS (Entwurf vorhanden): Du schreibst in diesem Modus NIEMALS das Dokument — writeContent ist IMMER false, content bleibt leer. Du bist beratender Fachanwalt: Beantworte Fragen zum Entwurf, diskutiere und sammle Änderungswünsche, weise auf rechtliche und steuerliche Fallstricke hin. Wenn der Nutzer eine Änderung anfordert, bestätige KNAPP, was du ändern würdest, und erinnere ihn daran, dass die Änderung erst mit dem Button "Aktualisieren" in den Beschluss übernommen wird.'
+          : 'DISKUSSIONS-MODUS: Es gibt noch keinen Beschlussentwurf. In diesem Modus schreibst du NIEMALS das Dokument — writeContent ist IMMER false, content bleibt leer. Du bist beratender Fachanwalt: Beantworte Fragen, diskutiere Gestaltungsoptionen, weise proaktiv auf rechtliche und steuerliche Fallstricke hin (Formerfordernisse, notarielle Beurkundung, Stimmverbote, vGA-Risiken) und sammle die wesentlichen Eckpunkte des geplanten Beschlusses.',
+        'Wenn für den Beschluss essentielle Angaben fehlen (Beträge, Zinssatz, Laufzeit, Daten, Konditionen, Beteiligte), frage gezielt nach — GENAU EINE Frage pro Antwort im Format "Frage X: <Frage>". Beim ERSTEN Nachfragen nenne kurz die Anzahl offener Fragen. Reine Diskussionsbeiträge des Nutzers beantwortest du aber einfach, ohne eine Frage anzuhängen.',
+        `Sobald aus deiner Sicht alles Wesentliche geklärt ist, sag dem Nutzer in einem kurzen Satz, dass er über den Button "${r.content ? 'Aktualisieren' : 'Verfassen'}" den Beschluss ${r.content ? 'aktualisieren' : 'erstellen'} lassen kann.`,
+      ]
 
   const CONTEXT = [
     `Dein Gesprächspartner ist ${req.user.name || req.user.email} — "ich"/"mich" in Nutzer-Nachrichten meint diese Person.`,
@@ -422,9 +424,9 @@ resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
     parsed.content = String(parsed.content ?? '').replace(/\\n/g, '\n')
     parsed.reply = String(parsed.reply ?? '')
     parsed.title = String(parsed.title ?? '')
-    // Diskussionsmodus-Garantie: Vor dem ersten "Verfassen" wird nie geschrieben,
-    // egal was das Modell liefert. Deterministisch, nicht nur per Prompt.
-    if (!composing && !r.content) parsed.writeContent = false
+    // Geschrieben wird AUSSCHLIESSLICH ueber den Verfassen/Aktualisieren-Button
+    // (compose=true) — deterministisch, egal was das Modell liefert.
+    if (!composing) parsed.writeContent = false
     db.prepare(
       `INSERT INTO chat_messages (resolution_id, role, content, wrote) VALUES (?, 'assistant', ?, ?)`,
     ).run(r.id, parsed.reply, parsed.writeContent ? 1 : 0)

@@ -85,15 +85,30 @@ describe('POST /api/resolutions/:id/chat', () => {
     expect(user.content).toContain('verfasse')
   })
 
-  it('Nachbearbeitung (Entwurf existiert): writeContent=true wirkt ohne compose', async () => {
+  it('auch mit Entwurf: ohne compose wird nie geschrieben', async () => {
     const r = await freshResolution()
     await request(app).patch(`/api/resolutions/${r.id}`).send({ content: '1. Alt.' })
     chatCompletionWithFallback.mockResolvedValue(
       llmReply({ reply: 'Geändert.', writeContent: true, content: '1. Neu.', title: '' }),
     )
     const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'aendere Punkt 1' })
+    expect(res.body.wrote).toBe(false)
+    expect(res.body.resolution.content).toBe('1. Alt.')
+  })
+
+  it('mit Entwurf + compose=true: Aktualisierung wirkt', async () => {
+    const r = await freshResolution()
+    await request(app).patch(`/api/resolutions/${r.id}`).send({ content: '1. Alt.' })
+    chatCompletionWithFallback.mockResolvedValue(
+      llmReply({ reply: 'Aktualisiert.', writeContent: true, content: '1. Neu.', title: '' }),
+    )
+    const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ compose: true })
     expect(res.body.wrote).toBe(true)
     expect(res.body.resolution.content).toBe('1. Neu.')
+    const user = db
+      .prepare(`SELECT content FROM chat_messages WHERE resolution_id = ? AND role = 'user' ORDER BY id DESC`)
+      .get(r.id)
+    expect(user.content).toContain('aktualisiere')
   })
 
   it('writeContent=false laesst das Dokument unveraendert (Rueckfrage)', async () => {
@@ -114,7 +129,7 @@ describe('POST /api/resolutions/:id/chat', () => {
     chatCompletionWithFallback.mockResolvedValue(
       llmReply({ reply: 'Geleert.', writeContent: true, content: '', title: '' }),
     )
-    const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'fang neu an' })
+    const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'fang neu an', compose: true })
     expect(res.body.wrote).toBe(true)
     expect(res.body.resolution.content).toBe('')
   })
