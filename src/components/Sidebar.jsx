@@ -1,8 +1,7 @@
 import { useState } from 'react'
-import { FileSignature, Building2, Users, LogOut, X, ScrollText, ChevronDown, Network } from 'lucide-react'
+import { FileSignature, LogOut, X, ScrollText, ChevronDown, Network } from 'lucide-react'
 
 const itemBase = 'flex items-center gap-3 px-3 py-2 rounded-[6px] text-sm transition-colors'
-const itemActive = 'bg-blue-50 text-[#0014FF] font-medium'
 const itemIdle = 'text-slate-700 hover:bg-slate-100'
 // Gruppen-Kopf: aktiv nur blaue Schrift, kein Hintergrund (Pille gehoert dem Unterpunkt)
 const headerActive = 'text-[#0014FF] font-medium'
@@ -65,6 +64,45 @@ function BeschluesseGroup({ route, counts }) {
   )
 }
 
+function StrukturGroup({ route }) {
+  const [open, setOpen] = useState(true)
+  const subs = [
+    { href: '#/gesellschaften', key: 'gesellschaften', label: 'Gesellschaften' },
+    { href: '#/gesellschafter', key: 'gesellschafter', label: 'Gesellschafter' },
+    { href: '#/organigramm', key: 'organigramm', label: 'Organigramm' },
+  ]
+  const groupActive = subs.some((s) => route === s.key)
+  return (
+    <div>
+      <div className={`${itemBase} !pr-1 ${groupActive ? headerActive : headerIdle}`}>
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer text-left"
+        >
+          <Network size={16} strokeWidth={2} />
+          <span className="truncate">Struktur</span>
+        </button>
+        <button
+          onClick={() => setOpen((o) => !o)}
+          aria-label={open ? 'Einklappen' : 'Aufklappen'}
+          className="p-1 -mr-0.5 rounded-[6px] text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition-colors cursor-pointer"
+        >
+          <ChevronDown size={15} className={`transition-transform ${open ? '' : '-rotate-90'}`} />
+        </button>
+      </div>
+      {!!open && (
+        <div className="mt-0.5 space-y-0.5">
+          {subs.map((s) => (
+            <a key={s.href} href={s.href} className={`${subBase} ${route === s.key ? subActive : subIdle}`}>
+              <span className="flex-1">{s.label}</span>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Sidebar({ route, user, counts = {}, mobileOpen, onClose }) {
   const c = { entwuerfe: 0, offen: 0, abgeschlossen: 0, papierkorb: 0, ...counts }
   const nav = (
@@ -79,18 +117,7 @@ export default function Sidebar({ route, user, counts = {}, mobileOpen, onClose 
       </div>
       <div className="flex-1 px-3 py-2 space-y-0.5">
         <BeschluesseGroup route={route} counts={c} />
-        <a href="#/gesellschaften" className={`${itemBase} ${route === 'gesellschaften' ? itemActive : itemIdle}`}>
-          <Building2 size={16} strokeWidth={2} />
-          <span className="flex-1">Gesellschaften</span>
-        </a>
-        <a href="#/gesellschafter" className={`${itemBase} ${route === 'gesellschafter' ? itemActive : itemIdle}`}>
-          <Users size={16} strokeWidth={2} />
-          <span className="flex-1">Gesellschafter</span>
-        </a>
-        <a href="#/organigramm" className={`${itemBase} ${route === 'organigramm' ? itemActive : itemIdle}`}>
-          <Network size={16} strokeWidth={2} />
-          <span className="flex-1">Organigramm</span>
-        </a>
+        <StrukturGroup route={route} />
       </div>
       <div className="px-3 py-4 border-t border-border">
         <div className="px-3 pb-2 text-xs text-text-muted truncate">{user.name || user.email}</div>
