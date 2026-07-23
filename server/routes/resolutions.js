@@ -7,6 +7,7 @@ import { buildFrame, normalizeContent } from '../services/beschluss.js'
 import { buildResolutionPdf, readSignatures } from '../services/pdf.js'
 import { chatCompletionWithFallback } from '../services/ai.js'
 import { isPng } from '../services/png.js'
+import { notifyResolution } from '../services/push.js'
 
 export const resolutionsRouter = Router()
 
@@ -187,6 +188,11 @@ resolutionsRouter.post('/:id/release', (req, res) => {
     for (const s of shareholdersOf(r.company_id)) insert.run(r.id, s.id)
     db.prepare(`UPDATE resolutions SET status = 'freigegeben', updated_at = datetime('now') WHERE id = ?`).run(r.id)
   })()
+  notifyResolution(
+    r.id,
+    { title: 'Neuer Beschluss zu unterschreiben', body: `${companyOf(r).name}: ${r.title || r.number}` },
+    req.user.id,
+  )
   res.json(fullResolution(db.prepare('SELECT * FROM resolutions WHERE id = ?').get(r.id)))
 })
 
@@ -212,6 +218,24 @@ resolutionsRouter.post('/:id/sign/:shareholderId', (req, res) => {
     db.prepare(
       `UPDATE resolution_signatures SET signature_path = ?, signed_at = datetime('now'), signed_by = ? WHERE id = ?`,
     ).run(file, req.user.id, row.id)
+
+    const r0 = db.prepare('SELECT * FROM resolutions WHERE id = ?').get(req.params.id)
+    const shName = db
+      .prepare('SELECT name FROM shareholders WHERE id = ?')
+      .get(req.params.shareholderId)?.name
+    const open = db
+      .prepare(
+        'SELECT COUNT(*) AS n FROM resolution_signatures WHERE resolution_id = ? AND signature_path IS NULL',
+      )
+      .get(r0.id).n
+    // Letzte Unterschrift -> nur die "vollstaendig"-Meldung (nicht beide)
+    notifyResolution(
+      r0.id,
+      open === 0
+        ? { title: 'Beschluss vollständig unterschrieben', body: `${companyOf(r0).name}: ${r0.title || r0.number}` }
+        : { title: `${shName} hat unterschrieben`, body: `${companyOf(r0).name}: ${r0.title || r0.number}` },
+      req.user.id,
+    )
   }
   const r = db.prepare('SELECT * FROM resolutions WHERE id = ?').get(req.params.id)
   res.json(fullResolution(r))

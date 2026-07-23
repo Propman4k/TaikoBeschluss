@@ -1,5 +1,7 @@
-import { useState } from 'react'
-import { FileSignature, LogOut, X, ScrollText, ChevronDown, Network } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { FileSignature, LogOut, X, ScrollText, ChevronDown, Network, Bell, BellOff } from 'lucide-react'
+import { api } from '../api.js'
+import { useToast } from './Toast.jsx'
 
 const itemBase = 'flex items-center gap-3 px-3 py-2 rounded-[6px] text-sm transition-colors'
 const itemIdle = 'text-slate-700 hover:bg-slate-100'
@@ -103,6 +105,74 @@ function StrukturGroup({ route }) {
   )
 }
 
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const raw = window.atob(base64)
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)))
+}
+
+// Glocke: Web-Push an/aus fuer dieses Geraet (Freigaben + Unterschriften)
+function PushBell() {
+  const [enabled, setEnabled] = useState(null)
+  const toast = useToast()
+
+  useEffect(() => {
+    navigator.serviceWorker?.ready
+      .then((reg) => reg.pushManager.getSubscription())
+      .then((sub) => setEnabled(Boolean(sub)))
+      .catch(() => setEnabled(false))
+  }, [])
+
+  async function toggle() {
+    try {
+      const reg = await navigator.serviceWorker.ready
+      const existing = await reg.pushManager.getSubscription()
+      if (existing) {
+        await api.post('/api/push/unsubscribe', { endpoint: existing.endpoint })
+        await existing.unsubscribe()
+        setEnabled(false)
+        toast('Benachrichtigungen deaktiviert.')
+        return
+      }
+      const { key } = await api.get('/api/push/vapid-key')
+      if (!key) return toast('Push ist serverseitig nicht konfiguriert.', 'error')
+      // Safari fragt (anders als Chrome) nicht automatisch beim subscribe() nach
+      // der Berechtigung — explizit anfordern, sonst wirft subscribe "denied".
+      const perm = await Notification.requestPermission()
+      if (perm !== 'granted') {
+        return toast(
+          perm === 'denied'
+            ? 'Benachrichtigungen sind blockiert — bitte im Browser/System erlauben.'
+            : 'Benachrichtigungen wurden nicht erlaubt.',
+          'error',
+        )
+      }
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(key),
+      })
+      await api.post('/api/push/subscribe', sub.toJSON())
+      setEnabled(true)
+      toast('Benachrichtigungen aktiviert.')
+    } catch (err) {
+      toast(`Push fehlgeschlagen: ${err.message}`, 'error')
+    }
+  }
+
+  return (
+    <button
+      onClick={toggle}
+      disabled={enabled === null}
+      className={`${itemBase} ${itemIdle} w-full cursor-pointer`}
+      title={enabled ? 'Push-Benachrichtigungen deaktivieren' : 'Push-Benachrichtigungen aktivieren'}
+    >
+      {enabled ? <Bell size={16} strokeWidth={2} /> : <BellOff size={16} strokeWidth={2} />}
+      {enabled ? 'Mitteilungen an' : 'Mitteilungen aus'}
+    </button>
+  )
+}
+
 export default function Sidebar({ route, user, counts = {}, mobileOpen, onClose }) {
   const c = { entwuerfe: 0, offen: 0, abgeschlossen: 0, papierkorb: 0, ...counts }
   const nav = (
@@ -121,6 +191,7 @@ export default function Sidebar({ route, user, counts = {}, mobileOpen, onClose 
       </div>
       <div className="px-3 py-4 border-t border-border">
         <div className="px-3 pb-2 text-xs text-text-muted truncate">{user.name || user.email}</div>
+        <PushBell />
         <a href="/api/auth/logout" className={`${itemBase} ${itemIdle}`}>
           <LogOut size={16} strokeWidth={2} /> Abmelden
         </a>

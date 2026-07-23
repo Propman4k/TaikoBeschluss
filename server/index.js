@@ -116,6 +116,29 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
 
+// ── Web-Push: Subscription-Verwaltung ──
+app.get('/api/push/vapid-key', requireAuth, (_req, res) => {
+  res.json({ key: process.env.VAPID_PUBLIC_KEY ?? null })
+})
+
+app.post('/api/push/subscribe', requireAuth, (req, res) => {
+  const sub = req.body
+  if (!sub?.endpoint) return res.status(400).json({ error: 'subscription fehlt' })
+  db.prepare(
+    `INSERT INTO push_subscriptions (user_id, endpoint, subscription) VALUES (?, ?, ?)
+     ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, subscription = excluded.subscription`,
+  ).run(req.user.id, sub.endpoint, JSON.stringify(sub))
+  res.json({ ok: true })
+})
+
+app.post('/api/push/unsubscribe', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?').run(
+    req.body?.endpoint ?? '',
+    req.user.id,
+  )
+  res.json({ ok: true })
+})
+
 app.use('/api/companies', requireAuth, companiesRouter)
 app.use('/api/shareholders', requireAuth, shareholdersRouter)
 app.use('/api/resolutions', requireAuth, resolutionsRouter)
