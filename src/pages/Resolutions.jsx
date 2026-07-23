@@ -35,7 +35,8 @@ function Row({ r, onDelete }) {
       <a href={`#/beschluss/${r.id}`} className={`flex-1 min-w-0 ${GRID}`}>
         <div className="text-sm font-medium truncate">{r.title || 'Ohne Titel'}</div>
         <div className="text-sm text-text-muted truncate">{r.company_name}</div>
-        <div className="text-sm text-text-muted">{fmtDate((r.created_at || '').slice(0, 10))}</div>
+        {/* Beschlussdatum (steht auf dem Dokument), nicht Anlage-Datum */}
+        <div className="text-sm text-text-muted">{fmtDate(r.date)}</div>
         <div className="justify-self-end">
           <StatusBadge r={r} />
         </div>

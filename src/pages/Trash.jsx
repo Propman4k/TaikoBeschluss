@@ -56,7 +56,7 @@ export default function Trash() {
               <div key={r.id} className={`${GRID} bg-surface rounded-[10px] shadow-card border border-border px-5 py-4`}>
                 <div className="text-sm font-medium truncate">{r.title || 'Ohne Titel'}</div>
                 <div className="text-sm text-text-muted truncate">{r.company_name}</div>
-                <div className="text-sm text-text-muted">{fmtDate((r.created_at || '').slice(0, 10))}</div>
+                <div className="text-sm text-text-muted">{fmtDate(r.date)}</div>
                 <div className="text-sm text-text-muted">{fmtDate((r.deleted_at || '').slice(0, 10))}</div>
                 <div className="flex items-center justify-end gap-2">
                   <button
