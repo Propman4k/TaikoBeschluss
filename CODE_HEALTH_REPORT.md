@@ -1,217 +1,242 @@
-# Code Health Report — TaikoBeschluss — 2026-07-22
+# Code Health Report — TaikoBeschluss — 2026-07-24 (Session 4)
+
+> Ersetzt den Report vom 2026-07-22 (Session 2, Score 24/100). Vollstaendiges
+> Audit: Code-Health + Security, jede Quelldatei gelesen (Server, Client, Tests,
+> Infra), Messungen mit Tools (vitest/coverage, ESLint, npm audit, gitleaks,
+> knip, jscpd, Audit-Skill-Helpers).
 
 ## Executive Summary
 
-**Score: 24/100 (F)** — der Code selbst ist sauber (klein, konsistent, parametrisiertes SQL,
-Build + Tests gruen), aber die **Daten-Situation ist ein Totalausfall-Risiko**: rechtlich
-relevante, unterschriebene Beschluesse liegen als Single Copy auf einer SSD — kein Backup,
-kein Git, kein .gitignore. Ein Hardware-Defekt oder ein falscher Befehl loescht alles
-unwiederbringlich. **Top-Quick-Win:** `git init` + `.gitignore` + erstes tägliches Backup
-ausserhalb des Projekt-Trees (< 1 h Gesamtaufwand fuer alle drei).
+**Score: 68/100 (C)** — dramatische Verbesserung gegenueber 24/100 (F): **alle
+5 kritischen Befunde aus Session 2 sind behoben** (Backup-Kette Mac+NAS+Offsite,
+Git+CI+Coverage-Ratchet, Secret-Hygiene sauber, Nummern-UNIQUE-Index,
+PNG-Magic-Bytes). Keine 🔴-Blocker mehr. Der Score wird von 8 🟡-Risiken
+gedrueckt, davon sind 4 in Summe < 1 Tag behebbar.
+**Top-Risiko:** `buildResolutionPdf` sanitized nicht — ein einziges
+Nicht-Latin-1-Zeichen im Beschlusstext (Emoji, Sonderzeichen aus Copy-Paste)
+wirft den PDF-Export und den automatischen Drive-Upload mit 500 ab.
+**Top-Quick-Win:** WinAnsi-Sanitizer (existiert schon fuers Dossier) auch im
+Beschluss-PDF anwenden — eine Zeile.
+
+## Delta zu Session 2 (Baseline 24/100)
+
+| Befund Session 2 | Status heute |
+|---|---|
+| 🔴 Keine Backup-Strategie (RPO = ∞) | ✅ behoben: Mac-LaunchAgent (VACUUM INTO + Integrity + Drive-Mirror), NAS-Cron (backup.sh mit Integrity, JSON-Export, Verschluesselungs-Guard, Healthcheck-Ping), Restore-Drill-Test |
+| 🔴 Kein Git-Repo / .gitignore | ✅ behoben: GitHub + CI (Tests, Coverage-Ratchet 90/68, Docker→GHCR), .gitignore/.dockerignore decken .env, data/, SA-Key |
+| 🔴 Secret-Hygiene | ✅ behoben: gitleaks — 0 Leaks in 59 Commits; lokale Secrets (server/.env, drive-sa.json) korrekt ignoriert |
+| 🟡 Nummern-Duplikate | ✅ behoben: UNIQUE-Index (company_id, number) |
+| 🟡 PNG-Uploads ohne Validierung | ✅ behoben: Magic-Bytes-Check (services/png.js) |
+| 🟡 Tests minimal (2 Smoke) | ✅ 84 Tests, Lines 94 % / Branches 74,8 % — aber s. Befund 6 (Frontend-Blindspot) |
+| 🟡 Kein Lint | ✅ ESLint 9 flat config, 0 Fehler |
+| 🟡 npm audit 2 high (dev) | ✅ 0 Vulnerabilities (Root + Server, prod + dev) |
 
 ## Projekt-Steckbrief
 
-Internes MVP-Tool (React 19/Vite + Express 5/SQLite), 24 Dateien, **3.190 LOC**.
-Kein Git-Repo, keine CI, lokal lauffaehig, noch nicht deployed. Architektur sauber
-geschichtet: Routes → Services (beschluss/pdf/ai) → SQLite; eine Quelle der Wahrheit
-fuer den Beschluss-Rahmen (`buildFrame`).
+Produktives internes Tool (laeuft live auf Synology NAS, echte Beschluesse,
+Anwalts-Feedback-Loop). React 19/Vite 7 + Express 5/SQLite, 52 Dateien,
+**7.309 LOC** (Session 2: 3.190). Kern: 3-stufige KI-Pipeline
+(Composer→Pruefagent→Reconciliation) mit Norm-Bibliothek als Anker
+(services/ki.js), eine Quelle der Wahrheit fuer den Beschluss-Rahmen
+(buildFrame), PDF via pdf-lib, Drive-Ablage per Service Account, Web-Push.
 
 ```mermaid
 flowchart LR
-  SPA[React SPA :3009] -->|/api Proxy| EX[Express :3010]
-  EX --> R1[routes/resolutions.js]
-  EX --> R2[routes/companies.js]
-  EX --> R3[routes/shareholders.js]
-  R1 --> S1[services/beschluss.js]
-  R1 --> S2[services/pdf.js]
-  R1 --> S3[services/ai.js → Gemini]
-  R1 & R2 & R3 --> DB[(server/data/taikobeschluss.db)]
-  R1 & R3 --> FS[server/data/signatures/*.png]
+  SPA[React SPA :3009] -->|/api| EX[Express :3010]
+  EX --> RES[routes/resolutions.js]
+  EX --> TYP[routes/types.js]
+  EX --> CO[routes/companies.js + shareholders.js]
+  RES --> KI[services/ki.js → ai.js → Gemini]
+  RES --> PDF[services/pdf.js]
+  RES --> DRV[services/drive.js → Google Drive]
+  RES --> PUSH[services/push.js → Web-Push]
+  RES & TYP & CO --> DB[(SQLite WAL)]
+  RES --> FS[signatures/*.png]
 ```
 
 ## Scorecard
 
 | Kategorie | Score | Severity | Confidence | Aufwand Fix |
 |---|---|---|---|---|
-| Datenverlust-Schutz / Backup | 0/10 | 🔴 | high | 🔧 Mittel |
-| Versionskontrolle (Git) | 0/10 | 🔴 | high | ⚡ Quick Win |
-| Secret-Hygiene (.gitignore/.env) | 2/10 | 🔴 | high | ⚡ Quick Win |
-| Korrektheit (Nummern-Vergabe) | 6/10 | 🟡 | high | ⚡ Quick Win |
-| Input-Validierung (PNG-Uploads) | 5/10 | 🟡 | high | ⚡ Quick Win |
-| Security (Session/CSP/RateLimit) | 7/10 | 🟡 | high | ⚡ Quick Win |
-| Test-Abdeckung | 4/10 | 🟡 | high | 🔧 Mittel |
-| Error-Handling | 6/10 | 🟡 | medium | ⚡ Quick Win |
-| Dependencies | 8/10 | 🟡 | high | ⚡ Quick Win |
-| Code-Qualitaet/Struktur | 9/10 | 🟢 | high | — |
-| Code-Hygiene (TODO/Lint/ESM) | 8/10 | 🟢 | high | — |
+| Datenverlust-Schutz / Backup | 9/10 | 🟢 | high | — |
+| Secret-Hygiene | 10/10 | 🟢 | high | — |
+| Build / CI / Deploy-Kette | 9/10 | 🟢 | high | — |
+| Dependencies (Vulns, Aktualitaet) | 9/10 | 🟢 | high | — |
+| Code-Qualitaet (Duplikation, Hygiene, Konsistenz) | 9/10 | 🟢 | high | — |
+| PDF-Robustheit (WinAnsi) | 5/10 | 🟡 | high | ⚡ Quick Win |
+| Kosten-Schutz (LLM-Rate-Limits) | 5/10 | 🟡 | high | ⚡ Quick Win |
+| AuthZ / Session-Lifecycle | 6/10 | 🟡 | high | ⚡ Quick Win |
+| Daten-Portabilitaet (Signatur-Pfade) | 6/10 | 🟡 | high | 🔧 Mittel |
+| Test-Abdeckung Server | 8/10 | 🟢 | high | — |
+| Test-Abdeckung Frontend + push.js | 4/10 | 🟡 | high | 🔧 Mittel |
+| Doku (.env.example) | 6/10 | 🟡 | medium | ⚡ Quick Win |
+| Datei-Groesse/Komplexitaet (Editor.jsx) | 7/10 | 🟡 | medium | 🏗️ nur bei Bedarf |
 
 ## Metriken-Dashboard
 
 | Metrik | Wert | Bewertung |
 |---|---|---|
-| LOC gesamt (JS/JSX) | 3.190 in 24 Dateien | 🟢 klein |
-| Groesste Datei | Editor.jsx 425 LOC | 🟢 kein Monolith (Verdacht aus Handoff **entkraeftet**) |
-| Zweitgroesste | resolutions.js 353 LOC | 🟢 ok, gut gegliedert |
-| Build | gruen (798 ms, 248 kB JS) | 🟢 |
-| Tests | 2/2 gruen, nur Backend-Smoke | 🟡 |
-| TODO/FIXME | 0 | 🟢 |
-| console.log | 1 (Server-Start) | 🟢 |
-| ESM-Konsistenz | 0 require() | 🟢 |
-| Lint/Format-Config | keine | 🟡 |
-| npm audit Root | 2 high (nur devDep `concurrently`) | 🟡 |
-| npm audit Server | 0 | 🟢 |
-| Outdated (Major) | vite 8, lucide 1.x, better-sqlite3 13 u.a. | 🟡 unkritisch |
-| DB | 80 kB .db + **4 MB .db-wal** + 10 Signatur-PNGs (4,7 MB) | 🟡 WAL beachten |
+| LOC (JS/JSX, ohne Tests) | 5.635 in 33 Dateien (Median 116) | 🟢 |
+| Groesste Dateien | Editor.jsx 724 · resolutions.js 481 · ki.js 434 | 🟡 > 2,5× Median, aber gegliedert |
+| Build | gruen (822 ms, 279 kB JS / 84 kB gzip) | 🟢 |
+| Tests | 84/84 gruen, 3 s | 🟢 |
+| Coverage | Lines 94,03 % / Branches 74,77 % (Ratchet 90/68 ✅) | 🟢 mit Blindspot (Befund 6) |
+| ESLint | 0 Fehler | 🟢 |
+| Duplikation (jscpd) | 0,96 % (7 Klone, groesster 13 Zeilen) | 🟢 |
+| TODO/FIXME · require() · skipped Tests | 0 · 0 · 0 | 🟢 |
+| npm audit (Root + Server) | 0 Vulnerabilities | 🟢 |
+| Outdated (Major) | eslint 10, vite 8, better-sqlite3 13, lucide 1.x u.a. | 🟢 unkritisch, kein Handlungsdruck |
+| gitleaks (59 Commits) | 0 Leaks; Worktree-Funde = lokale .env/SA-Key (korrekt ignoriert) | 🟢 |
+| Churn-Hotspots (90 d) | resolutions.js (18), Editor.jsx (15), Companies.jsx (10) | ℹ️ decken sich mit Groesse |
 
 ## Top-Befunde
 
-### 1. 🔴 Keine Backup-Strategie — Datenverlust = Totalverlust (Confidence: high, 🔧 Mittel)
+### 1. 🟡 Beschluss-PDF crasht bei Nicht-WinAnsi-Zeichen (Confidence: high, ⚡ Quick Win)
 
-**Data-Safety-Checkliste (`~/.claude/data-safety-checklist.md`) Phasen A–E:**
+`buildDossierPdf` sanitized jeden Text auf WinAnsi ([pdf.js:133](server/services/pdf.js:133)),
+`buildResolutionPdf` **nicht**. Standard-Helvetica kann nur Latin-1: ein Emoji, ein
+typografisches Sonderzeichen oder ein unsichtbares Unicode-Zeichen aus Copy-Paste im
+Beschlusstext (direkt editierbar via PATCH), im Firmennamen oder im signer_name wirft
+`drawText` — der PDF-Download liefert 500 und, gravierender, der **automatische
+Drive-Upload nach der letzten Unterschrift schlaegt still fehl** (nur Log-Zeile).
+**Fix A (empfohlen):** `sanitize()` in `wrap()` bzw. an den `drawText`-Stellen von
+`buildResolutionPdf` anwenden — gleiche Funktion, ~3 Zeilen, Test mit Emoji-Content.
+**Fix B:** Unicode-Font einbetten (fontkit + TTF) — loest es grundsaetzlich, aber
+groesserer Eingriff und neue Assets. Fuer den Use-Case reicht A.
 
-- **A Discovery:** Persistenter State = `server/data/taikobeschluss.db` (+ `-wal`/`-shm`),
-  `server/data/signatures/*.png` (10 Dateien, inkl. geleisteter Unterschriften auf
-  freigegebenen Beschluessen), `server/.env` (Secrets). **Alles Source of Truth, keine
-  Kopie** — es gibt keine externe Quelle zum Re-Sync. Session-Store liegt in derselben DB.
-- **B Backup-Audit:** ❌ **Es existiert kein einziges Backup.** Kein Scheduled-Backup, kein
-  Offsite, kein Integrity-Check, kein Restore-Drill. 3-2-1-Regel: aktuell **1-1-0**.
-  Zusatzrisiko: Die WAL-Datei (4 MB) ist groesser als die DB (80 kB) — ein naives Kopieren
-  nur der `.db`-Datei wuerde fast alle Daten verlieren. Backups muessen `VACUUM INTO` oder
-  die better-sqlite3 `db.backup()`-API nutzen.
-- **C Angriffsflaeche:** Ein `rm -rf server/data/` (oder Projektordner-Loeschung,
-  SSD-Ausfall, macOS-Reinstall) vernichtet DB **und** Signaturen in einem Schritt — exakt
-  das TaikoTrack-Muster (Live-Daten und einziger Speicherort im selben Parent). Da kein
-  Git existiert, waere auch der **Code** weg. `fs.rmSync` an 4 Stellen
-  ([resolutions.js:163](server/routes/resolutions.js:163), [resolutions.js:194](server/routes/resolutions.js:194),
-  [shareholders.js:57](server/routes/shareholders.js:57), [shareholders.js:81](server/routes/shareholders.js:81)) —
-  alle gezielt auf Einzeldateien, `force: true`, ok.
-- **D Guardrails:** keine (kein Verify-Gate, kein Safety-Marker, kein README in `server/data/`).
-- **E Action-Items:** siehe Empfohlene Reihenfolge unten (Backup raus aus dem Projekt-Tree,
-  Scheduled via LaunchAgent, Offsite-Mirror, Restore-Drill). Referenz-Implementierung:
-  `~/Projects/TaikoTrack/server/lib/backup.js` + `scripts/install-backup-schedule.sh`.
+### 2. 🟡 LLM-Endpoints ohne Rate-Limit = offener Kostendeckel (Confidence: high, ⚡ Quick Win)
 
-**Auswirkung:** RPO = ∞. Bei Verlust sind unterschriebene Gesellschafterbeschluesse
-(rechtlich relevante Dokumente) unwiederbringlich weg.
+`chatLimiter` (60/15 min) schuetzt nur POST `/:id/chat`. **Ungeschuetzt:**
+GET `/:id/dossier` ([resolutions.js:331](server/routes/resolutions.js:331), 1 LLM-Call
+pro Klick), POST `/resolution-types/retitle` und `/backfill`
+([types.js:48](server/routes/types.js:48), **N LLM-Calls pro Klick**, N = Bestand).
+Zusaetzlich kein Concurrency-Guard: Doppelklick auf „Bestand klassifizieren" startet
+zwei parallele Loops (doppelte Kosten, harmlos im Ergebnis).
+**Fix A (empfohlen):** denselben `rateLimit` auf die drei Routen legen (z. B. 10/15 min
+fuer backfill/retitle, 20/15 min fuer dossier) + ein simples in-memory
+`running`-Flag fuer backfill/retitle. ~10 Zeilen.
+**Fix B:** globaler Limiter auf alle /api-Routen — einfacher, aber trifft auch das
+Polling (`/chat/status` alle 1,5 s) und muesste hoch konfiguriert werden. A ist gezielter.
 
-**Fix-Strategien:**
-1. **TaikoTrack-Muster uebernehmen** (empfohlen): `server/lib/backup.js` adaptieren —
-   `db.backup()` nach `~/Library/Application Support/TaikoBeschluss/backups/`, Signaturen
-   per rsync mit, tiered Retention, LaunchAgent taeglich + RunAtLoad. Aufwand: ~0,5 Tag.
-   Pro: erprobt, erfuellt Checkliste. Contra: etwas Code.
-2. **Minimal-Variante:** Ein Backup-Script (`VACUUM INTO` + `cp -R signatures/`) manuell/
-   per LaunchAgent. Aufwand: 1–2 h. Pro: schnell. Contra: kein Offsite, keine Retention —
-   nur als Sofortmassnahme, nicht als Endzustand.
+### 3. 🟡 Entfernter Gesellschafter behaelt Zugang bis zu 30 Tage (Confidence: high, ⚡ Quick Win)
 
-**Empfehlung:** Sofort Variante 2 als Notnagel, dann Variante 1. Fuer Legal-Dokumente sind
-die Standard-RPO-Ziele der Checkliste eher zu weich — Offsite ist Pflicht.
+`isAllowed` wird nur beim **Login** geprueft ([auth.js:10](server/auth.js:10));
+`requireAuth` prueft nur, ob der User in `users` existiert — und Users werden nie
+geloescht. Session-Cookie lebt 30 Tage. Wer als Gesellschafter (signer_email) entfernt
+wird, behaelt also bis zu 30 Tage **Vollzugriff** (alle Firmen, Beschluesse loeschen,
+fuer andere unterschreiben). Bei 2 vertrauten Nutzern heute akzeptabel, aber der Fix
+ist billig und das Tool verwaltet rechtlich bindende Dokumente.
+**Fix A (empfohlen):** in `requireAuth` zusaetzlich `isAllowed(user.email)` pruefen
+(1 SQLite-Query pro Request — bei dieser Last irrelevant). 2 Zeilen + Test.
+**Fix B:** Session-Invalidierung beim Entfernen eines Gesellschafters (Sessions-Tabelle
+nach userId durchsuchen) — praeziser, aber mehr Code fuer denselben Effekt.
 
-### 2. 🔴 Kein Git-Repo + kein .gitignore (Confidence: high, ⚡ Quick Win)
+### 4. 🟡 Absolute Signatur-Pfade in der DB brechen bei Restore/Umzug (Confidence: high, 🔧 Mittel)
 
-Der gesamte Code existiert nur in diesem Ordner — keine Historie, kein Remote, kein Undo.
-Zusaetzlich fehlt `.gitignore`: bei einem spaeteren `git init && git add .` landen
-`server/.env` (Gemini-Key, Google-OAuth-Secret), `server/data/` (DB + Unterschriften!)
-und `node_modules` im Repo — bei Push waeren die Secrets kompromittiert.
+`resolution_signatures.signature_path` und `shareholders.default_signature_path`
+speichern **absolute** Pfade ([resolutions.js:273](server/routes/resolutions.js:273)).
+Prod schreibt `/app/data/...`, Dev `~/Projects/.../server/data/...`. Ein Restore eines
+Prod-Backups auf dem Mac (oder kuenftiger Pfad-Umzug) laesst `readSignatures` die
+Dateien nicht finden — **PDFs erscheinen still ohne Unterschriften** (catch schluckt).
+Genau das Szenario, fuer das die Backups da sind.
+**Fix A (empfohlen):** nur den Dateinamen speichern, beim Lesen mit `SIGNATURES_DIR`
+joinen; Einmal-Migration in db.js (`UPDATE ... SET path = basename(path)` via JS). ~20 Zeilen.
+**Fix B:** Beim Restore Pfade umschreiben (Doku im Backup-README) — fragil, verlagert
+das Problem auf den Ernstfall.
 
-**Fix:** `.gitignore` (node_modules, dist, server/.env, server/data/, coverage) **zuerst**
-anlegen, dann `git init` + Initial-Commit. Aufwand: 10 min. Kein sinnvolles Contra.
+### 5. 🟡 push.js zu 35 % ungetestet (Confidence: high, 🔧 Mittel)
 
-### 3. 🟡 Beschluss-Nummern-Vergabe kann Duplikate erzeugen (Confidence: high, ⚡ Quick Win)
+`sendToUser`/`notifyResolution` ([push.js:14](server/services/push.js:14)) sind
+fire-and-forget und fast ohne Test (35 % Lines, 27 % Branches) — gerade die
+Cleanup-Logik (404/410 → Subscription loeschen) und der `exceptUserId`-Filter waeren
+regressionsanfaellig. Web-push laesst sich wie ai.js mocken (Muster in chat.test.js).
+**Fix:** ein Testfile mit 3 Faellen (Zustellung an Beteiligte ausser Ausloeser,
+410-Cleanup, unkonfiguriert = no-op). ~1 h.
 
-[resolutions.js:96-99](server/routes/resolutions.js:96): `COUNT(*) + 1` je Firma+Jahr.
-Wird ein Beschluss **endgueltig geloescht**, sinkt der Count → die naechste Nummer
-kollidiert mit einer bestehenden. Beispiel: 2026-01…03 existieren, 2026-02 wird permanent
-geloescht → naechster neuer Beschluss bekommt wieder „2026-03". Fuer fortlaufend
-nummerierte Rechtsdokumente ein echtes Problem. Kein UNIQUE-Constraint faengt das ab.
+### 6. 🟡 Coverage-Blindspot: Frontend-Seiten zaehlen nicht mit (Confidence: high, 🔧 Mittel)
 
-**Fix-Strategien:**
-1. `MAX(CAST(substr(number, 6) AS INTEGER)) + 1` statt COUNT (empfohlen, 5 Zeilen) +
-   `UNIQUE(company_id, number)`-Index als Sicherheitsnetz.
-2. Nur UNIQUE-Constraint (Fehler statt Duplikat) — schlechtere UX.
+Die 94 % gelten nur fuer Module, die Tests importieren. **Editor.jsx (724 LoC),
+Resolutions.jsx, Settings.jsx, alle Modals — 0 Tests und unsichtbar im
+Coverage-Nenner.** Der Ratchet schuetzt also den Server, nicht den Client. Bewusster
+Trade-off (User testet auf Prod), aber der Report soll ehrlich sein: die kritischen
+UI-Flows (compose-Polling/Resume, Signatur-Flow, hints-Anzeige) haben kein Netz.
+**Fix (wenn gewuenscht, nicht dringend):** 2–3 jsdom-Tests fuer die reine Logik
+(z. B. compose-Status-Polling mit gemocktem api) — nicht die volle UI.
+Alternativ: bewusst so lassen und hier dokumentieren. Kein Ratchet-Umbau noetig.
 
-### 4. 🟡 Raw-PNG-Uploads ohne Format-Validierung (Confidence: high, ⚡ Quick Win)
+### 7. 🟡 19 genutzte Env-Vars fehlen im .env.example (Confidence: medium, ⚡ Quick Win)
 
-[resolutions.js:199-200](server/routes/resolutions.js:199) und
-[shareholders.js:66-67](server/routes/shareholders.js:66): Der Request-Body wird verbatim
-als `.png` gespeichert — nur der Content-Type-Header (frei waehlbar) und das 5-MB-Limit
-begrenzen. Eine Nicht-PNG-Datei laesst spaeter `doc.embedPng()` in
-[pdf.js:101](server/services/pdf.js:101) werfen → **PDF-Export des Beschlusses dauerhaft
-kaputt (500)**, bis die Signatur ersetzt wird.
+Helper meldet u. a. `SESSION_SECRET`, `APP_URL`, `VAPID_*`, `BACKUP_*`, `DATA_DIR`,
+`GOOGLE_SA_KEY`, `DRIVE_ROOT_FOLDER_ID` als undokumentiert (server/.env* ist fuer
+Tools lesegesperrt, daher medium confidence — moeglicherweise teilweise vorhanden).
+Neu-Setup/Restore haengt sonst an Tribal Knowledge bzw. PROJECT_HANDOFF.
+**Fix:** `server/.env.example` mit allen Keys + Einzeiler-Kommentar ergaenzen. ~15 min.
 
-**Fix:** Magic-Bytes pruefen (PNG-Header `89 50 4E 47 0D 0A 1A 0A`, 8 Bytes, eine
-Hilfsfunktion, beide Routen). Alternativ embedPng bei Upload probeweise ausfuehren —
-teurer, unnoetig.
+### 8. 🟡 Editor.jsx 724 LoC / Nesting 5 (Confidence: medium, 🏗️ nur bei Bedarf)
 
-### 5. 🟡 Security-Kleinigkeiten (Confidence: high, ⚡ Quick Win)
+Doppelt so gross wie die Kritisch-Schwelle (2,5× Median = 290) und Churn-Hotspot Nr. 2.
+Intern sauber gegliedert (ComposeOverlay, HintsBubble als eigene Funktionen). **Kein
+Handlungsbedarf jetzt** — aber beim naechsten groesseren Editor-Feature Overlay/Bubble
+in eigene Dateien ziehen, statt weiter anzubauen. Kein Vorab-Refactoring.
 
-- **Dev-Login umgeht `isAllowed`** ([index.js:97-106](server/index.js:97)): jede beliebige
-  E-Mail wird als User angelegt und eingeloggt. Nur aktiv bei `DEV_LOGIN=1` + non-prod +
-  Bind auf 127.0.0.1 — Restrisiko: Prod-Start mit vergessenem `DEV_LOGIN=1` scheitert nur
-  an `NODE_ENV`. Ein `isAllowed`-Check auch hier kostet 1 Zeile.
-- **Chat-Endpoint ohne Rate-Limit** ([resolutions.js:273](server/routes/resolutions.js:273)):
-  `authLimiter` gilt nur fuer Auth-Routen; jeder eingeloggte Nutzer kann unbegrenzt
-  LLM-Calls (Kosten) ausloesen. Ein `rateLimit` auf `/api/resolutions/:id/chat` genuegt.
-- **Papierkorb-Beschluesse** sind weiterhin sign-/release-/PDF-bar (kein `deleted_at`-Check
-  in diesen Routen) — inkonsistent, aber kein Datenrisiko.
-- Positiv: SESSION_SECRET-Pflicht in Prod erzwungen, helmet-CSP konfiguriert,
-  Cookies httpOnly+sameSite=lax+secure(prod), SQL 100 % parametrisiert, FS-Pfade nie im
-  JSON, Path-Traversal bei Signatur-Dateien faktisch durch den vorherigen DB-Lookup blockiert.
+### Kosmetik (gesammelt, je < 30 min, kein Einzelkapitel)
 
-### 6. 🟡 Test-Abdeckung minimal (Confidence: high, 🔧 Mittel)
+- **Chat-Fehlerpfad:** schlaegt der LLM-Call fehl, bleibt die User-Message in
+  `chat_messages` haengen — Retry erzeugt Duplikat im Verlauf (und im Dossier).
+  Fix: User-Insert erst nach erfolgreichem KI-Turn oder bei Fehler wieder loeschen.
+- **Nummern-Race:** parallele POSTs koennen via MAX+1 kollidieren → UNIQUE-Index
+  faengt es, aber als 500 statt sauberem Retry. Akzeptabel bei 2 Nutzern.
+- **Ungenutzte Exports:** `CHAT_SCHEMA`, `badGermanSpelling` (ki.js) werden nirgends
+  importiert — `export` entfernen.
+- **Resolutions.jsx:** `user`-Prop wird uebergeben, aber nicht genutzt.
+- **DELETE /shareholders/:id/signature:** fehlende 404-Pruefung → 200 mit leerem Body
+  bei unbekannter ID.
+- **NAS-JSON-Export** (deploy/backup.sh): `chat_messages` und `resolution_types`
+  fehlen in der Format-Resilienz-Schicht (DB-Snapshot enthaelt alles — nur der
+  JSON-Fallback ist unvollstaendig).
+- **Dockerfile:** Container laeuft als root; `USER node` + passende Volume-Rechte
+  waeren sauberer (Zugriff nur via localhost/Tunnel — niedrige Prio).
+- **Editor `downloadDossier`/`saveSignature`:** rohe `fetch` ohne das
+  401-Handling aus api.js (Session abgelaufen = kryptischer Fehler statt Login).
 
-2 Backend-Smoke-Tests, keine Frontend-Tests, keine Coverage-Messung. Ungetestet u.a.:
-Nummern-Vergabe (siehe Befund 3!), Papierkorb-Lifecycle, Chat-Endpoint (LLM mockbar),
-`buildFrame` je Rechtsform, `usePagination`. **Empfehlung:** gezielt Tests fuer die
-Geld/Legal-Pfade (Nummern, Release, Permanent-Delete inkl. Datei-Cleanup, buildFrame),
-kein Coverage-Theater.
+### Bewusste, dokumentierte Design-Entscheidungen (keine Befunde)
 
-### 7. 🟡 Restliches (Confidence: high, ⚡ je < 1 h)
-
-- **Kein zentrales Error-Handling:** Express-5-Default faengt zwar async-Fehler, aber ohne
-  Error-Middleware gibt es keine einheitlichen JSON-Fehler + Logging. ~15 Zeilen.
-- **`concurrently` 2 high Vulns** (nur dev): `npm audit fix` bzw. Major-Update.
-- **Keine ESLint-Config:** minimal `eslint.config.js` mit `eslint:recommended` +
-  `react-hooks` genuegt — haette die `0 &&`-Falle (2× aufgetreten) maschinell gefangen.
-- **Majors offen** (vite 8, lucide 1.x, better-sqlite3 13, jest-dom 7, plugin-react 6):
-  kein Handlungsdruck, bei Gelegenheit.
+- Jeder eingeloggte Nutzer darf fuer jeden Gesellschafter unterschreiben
+  (`signed_by` protokolliert) und sieht/bearbeitet alle Firmen — flaches
+  Berechtigungsmodell fuer 2 vertraute Nutzer.
+- `composeStatus` in-memory, Single-Prozess-Annahme (kommentiert).
+- Unterschriften bleiben bei Nachbearbeitung erhalten (User-Entscheidung).
+- Pruef-/Reconcile-Fehler degradieren still zum Composer-Entwurf.
 
 ## Prioritaets-Matrix
 
 ```mermaid
 quadrantChart
     title Impact x Aufwand
-    x-axis "geringer Aufwand" --> "hoher Aufwand"
-    y-axis "geringer Impact" --> "hoher Impact"
-    quadrant-1 "Projekte"
-    quadrant-2 "Sofort machen"
-    quadrant-3 "Bei Gelegenheit"
-    quadrant-4 "Meiden"
-    ".gitignore + git init": [0.1, 0.95]
-    "Backup-Notnagel-Script": [0.2, 0.9]
-    "Backup TaikoTrack-Muster": [0.55, 0.92]
-    "Nummern-Fix + UNIQUE": [0.15, 0.7]
-    "PNG-Magic-Bytes": [0.12, 0.55]
-    "Dev-Login isAllowed": [0.05, 0.4]
-    "Chat-Rate-Limit": [0.08, 0.42]
-    "Error-Middleware": [0.2, 0.35]
-    "ESLint-Setup": [0.15, 0.3]
-    "Legal-Pfad-Tests": [0.5, 0.6]
-    "Major-Updates": [0.45, 0.15]
+    x-axis Geringer Aufwand --> Hoher Aufwand
+    y-axis Geringer Impact --> Hoher Impact
+    quadrant-1 Einplanen
+    quadrant-2 Sofort
+    quadrant-3 Irgendwann
+    quadrant-4 Vermeiden
+    "1 PDF-Sanitizer": [0.1, 0.9]
+    "2 LLM-Rate-Limits": [0.15, 0.75]
+    "3 Session-Check": [0.15, 0.65]
+    "4 Signatur-Pfade": [0.4, 0.7]
+    "5 push.js-Tests": [0.35, 0.45]
+    "7 .env.example": [0.1, 0.35]
+    "6 Frontend-Tests": [0.6, 0.4]
+    "8 Editor-Split": [0.7, 0.25]
 ```
 
 ## Empfohlene Reihenfolge
 
-1. **`.gitignore` anlegen + `git init` + Initial-Commit** (10 min) — schuetzt Code sofort,
-   verhindert kuenftigen Secret-Leak.
-2. **Backup-Notnagel** (1–2 h): Script mit `VACUUM INTO` + Signaturen-Copy nach
-   `~/Library/Application Support/TaikoBeschluss/backups/`, sofort einmal ausfuehren.
-3. **Backup richtig** (0,5 Tag): TaikoTrack-Muster — tiered Retention, LaunchAgent
-   (RunAtLoad + StartInterval), Offsite-Mirror (iCloud/rclone), Restore-Drill,
-   README/Safety-Marker in `server/data/`.
-4. **Nummern-Vergabe fixen** (MAX statt COUNT + UNIQUE-Index) + Test dazu (1 h).
-5. **PNG-Magic-Bytes-Check** in beide Upload-Routen (30 min).
-6. **Security-Kleinigkeiten**: Dev-Login-isAllowed, Chat-Rate-Limit, deleted_at-Guards (1 h).
-7. **Error-Middleware + ESLint** (1–2 h).
-8. **Tests fuer Legal-Pfade** (0,5 Tag), `npm audit fix` fuer concurrently nebenbei.
-
-Punkte 1–3 sind **vor** dem naechsten produktiven Einsatz faellig; 4–5 vor dem Deployment;
-6–8 normale Wartung.
+1. **PDF-WinAnsi-Sanitizer** in buildResolutionPdf (⚡, Befund 1) — schuetzt den
+   Kern-Flow (PDF + Drive-Ablage).
+2. **Rate-Limits + running-Guard** fuer dossier/backfill/retitle (⚡, Befund 2).
+3. **isAllowed in requireAuth** (⚡, Befund 3).
+4. **.env.example vervollstaendigen** (⚡, Befund 7).
+5. **Signatur-Pfade relativ speichern** + Migration (🔧, Befund 4).
+6. **push.js-Tests** (🔧, Befund 5).
+7. Kosmetik-Sammelposten in einem Aufwasch, wenn ohnehin in den Dateien gearbeitet wird.
+8. Befunde 6/8 bewusst offen lassen, bis ein Anlass besteht.
