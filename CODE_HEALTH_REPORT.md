@@ -18,9 +18,12 @@ wirft den PDF-Export und den automatischen Drive-Upload mit 500 ab.
 **Top-Quick-Win:** WinAnsi-Sanitizer (existiert schon fuers Dossier) auch im
 Beschluss-PDF anwenden — eine Zeile.
 
-**Update (gleiche Session):** Die 4 Quick-Wins (Befunde 1, 2, 3, 7) sind
-umgesetzt und einzeln committet — offen bleiben Befunde 4–6, 8 und die
-Kosmetik-Sammlung.
+**Update (gleiche Session):** Befunde 1, 2, 3, 4, 7 und die komplette
+Kosmetik-Sammlung sind umgesetzt (Commits e70fce8, 159094b, 1f67dde, dc8abdb,
+b6953a2, 17125a3, f052521). **Bewusst offen gelassen:** Befund 5 (push.js-Tests
+= Coverage-Chasing bei geringem Risiko), Befund 6 (Frontend-Tests), Befund 8
+(Editor-Split) sowie `USER node` im Dockerfile — alle drei sind Vorab-Arbeit
+ohne konkreten Anlass, siehe Begruendung dort. Testsuite 86 gruen.
 
 ## Delta zu Session 2 (Baseline 24/100)
 
@@ -135,7 +138,14 @@ ist billig und das Tool verwaltet rechtlich bindende Dokumente.
 **Fix B:** Session-Invalidierung beim Entfernen eines Gesellschafters (Sessions-Tabelle
 nach userId durchsuchen) — praeziser, aber mehr Code fuer denselben Effekt.
 
-### 4. 🟡 Absolute Signatur-Pfade in der DB brechen bei Restore/Umzug (Confidence: high, 🔧 Mittel)
+### 4. ✅ Absolute Signatur-Pfade in der DB brechen bei Restore/Umzug (behoben in dc8abdb)
+
+> Umgesetzt wurde die kleinere Variante als geplant: kein Schema-Umbau und keine
+> Migration, sondern `signatureFile()` normalisiert beim **Lesen** (Basename +
+> aktuelles `SIGNATURES_DIR`) — deckt Alt-Datensaetze und neue gleichermaßen ab.
+> Regressionstest stellt eine Prod-DB mit `/app/data/...`-Pfaden nach.
+> Hinweis: `deploy/restore-test.sh` prueft weiterhin nur DB-Integritaet und
+> Tarball-Lesbarkeit, nicht die Pfad-Auflösung — der Unit-Test deckt das jetzt ab.
 
 `resolution_signatures.signature_path` und `shareholders.default_signature_path`
 speichern **absolute** Pfade ([resolutions.js:273](server/routes/resolutions.js:273)).
@@ -183,25 +193,26 @@ Intern sauber gegliedert (ComposeOverlay, HintsBubble als eigene Funktionen). **
 Handlungsbedarf jetzt** — aber beim naechsten groesseren Editor-Feature Overlay/Bubble
 in eigene Dateien ziehen, statt weiter anzubauen. Kein Vorab-Refactoring.
 
-### Kosmetik (gesammelt, je < 30 min, kein Einzelkapitel)
+### Kosmetik (gesammelt) — ✅ erledigt in 17125a3 + f052521
 
-- **Chat-Fehlerpfad:** schlaegt der LLM-Call fehl, bleibt die User-Message in
-  `chat_messages` haengen — Retry erzeugt Duplikat im Verlauf (und im Dossier).
-  Fix: User-Insert erst nach erfolgreichem KI-Turn oder bei Fehler wieder loeschen.
-- **Nummern-Race:** parallele POSTs koennen via MAX+1 kollidieren → UNIQUE-Index
-  faengt es, aber als 500 statt sauberem Retry. Akzeptabel bei 2 Nutzern.
-- **Ungenutzte Exports:** `CHAT_SCHEMA`, `badGermanSpelling` (ki.js) werden nirgends
-  importiert — `export` entfernen.
-- **Resolutions.jsx:** `user`-Prop wird uebergeben, aber nicht genutzt.
-- **DELETE /shareholders/:id/signature:** fehlende 404-Pruefung → 200 mit leerem Body
-  bei unbekannter ID.
-- **NAS-JSON-Export** (deploy/backup.sh): `chat_messages` und `resolution_types`
-  fehlen in der Format-Resilienz-Schicht (DB-Snapshot enthaelt alles — nur der
-  JSON-Fallback ist unvollstaendig).
-- **Dockerfile:** Container laeuft als root; `USER node` + passende Volume-Rechte
-  waeren sauberer (Zugriff nur via localhost/Tunnel — niedrige Prio).
-- **Editor `downloadDossier`/`saveSignature`:** rohe `fetch` ohne das
-  401-Handling aus api.js (Session abgelaufen = kryptischer Fehler statt Login).
+- ✅ **Chat-Fehlerpfad:** User-Message wird bei fehlgeschlagenem KI-Turn
+  zurueckgerollt (vorher: Duplikat nach Retry im Verlauf, im Dossier und in der
+  KI-History). Der Test, der die alte Behandlung zusicherte, ist bewusst umgedreht.
+- ✅ **Ungenutzte Exports** `CHAT_SCHEMA`, `badGermanSpelling` — nur noch modul-intern.
+- ✅ **Resolutions.jsx:** ungenutzte `user`-Prop entfernt.
+- ✅ **DELETE /shareholders/:id/signature:** 404 bei unbekannter ID.
+- ✅ **NAS-JSON-Export:** `chat_messages` + `resolution_types` ergaenzt.
+- ✅ **Rohe `fetch`-Aufrufe** (Dossier-Download, PNG-Uploads in Editor und
+  ShareholderModal): nutzen jetzt `rawRequest()` aus api.js, also dieselbe
+  401-Behandlung wie alles andere.
+- ✅ **Verwaistes Poll-Intervall** im Editor: `compose()` beendet einen ggf. noch
+  laufenden Resume-Poller, statt die Referenz zu ueberschreiben (Zusatzfund).
+- **Nummern-Race** (offen, akzeptiert): parallele POSTs koennen via MAX+1
+  kollidieren → UNIQUE-Index faengt es, aber als 500 statt sauberem Retry.
+  Bei 2 Nutzern nicht relevant.
+- **Dockerfile** (offen, bewusst): Container laeuft als root. `USER node` wuerde
+  die Volume-Rechte auf der laufenden NAS anfassen — schlechtes Risiko-Nutzen-
+  Verhaeltnis fuer einen Dienst, der nur ueber localhost/Tunnel erreichbar ist.
 
 ### Bewusste, dokumentierte Design-Entscheidungen (keine Befunde)
 
@@ -233,14 +244,19 @@ quadrantChart
     "8 Editor-Split": [0.7, 0.25]
 ```
 
-## Empfohlene Reihenfolge
+## Stand am Ende der Session
 
-1. **PDF-WinAnsi-Sanitizer** in buildResolutionPdf (⚡, Befund 1) — schuetzt den
-   Kern-Flow (PDF + Drive-Ablage).
-2. **Rate-Limits + running-Guard** fuer dossier/backfill/retitle (⚡, Befund 2).
-3. **isAllowed in requireAuth** (⚡, Befund 3).
-4. **.env.example vervollstaendigen** (⚡, Befund 7).
-5. **Signatur-Pfade relativ speichern** + Migration (🔧, Befund 4).
-6. **push.js-Tests** (🔧, Befund 5).
-7. Kosmetik-Sammelposten in einem Aufwasch, wenn ohnehin in den Dateien gearbeitet wird.
-8. Befunde 6/8 bewusst offen lassen, bis ein Anlass besteht.
+Abgearbeitet: 1 (PDF-Sanitizer), 2 (Rate-Limits + Guard), 3 (isAllowed in
+requireAuth), 4 (Signatur-Pfade), 7 (Env-Doku) und die Kosmetik-Sammlung.
+Testsuite 86 gruen, Lint sauber, Build gruen. Push/Deploy steht noch aus
+(nur auf Ansage — danach erst CI abwarten, dann `deploy/deploy.sh`).
+
+Bleibt bewusst liegen, bis ein Anlass besteht:
+
+- **Befund 5** push.js-Tests — Ausfallmodus ist eine fehlende Benachrichtigung,
+  kein Datenverlust; Test waere Coverage-Chasing.
+- **Befund 6** Frontend-Tests — der Nutzer verifiziert auf Prod; erst bei
+  wiederkehrenden UI-Regressionen sinnvoll.
+- **Befund 8** Editor-Split — kein Vorab-Refactoring; Overlay/Bubble beim
+  naechsten groesseren Editor-Feature herausziehen.
+- **Dockerfile `USER node`** — Eingriff in Volume-Rechte am laufenden Prod-System.
