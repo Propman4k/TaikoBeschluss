@@ -18,6 +18,10 @@ wirft den PDF-Export und den automatischen Drive-Upload mit 500 ab.
 **Top-Quick-Win:** WinAnsi-Sanitizer (existiert schon fuers Dossier) auch im
 Beschluss-PDF anwenden — eine Zeile.
 
+**Update (gleiche Session):** Die 4 Quick-Wins (Befunde 1, 2, 3, 7) sind
+umgesetzt und einzeln committet — offen bleiben Befunde 4–6, 8 und die
+Kosmetik-Sammlung.
+
 ## Delta zu Session 2 (Baseline 24/100)
 
 | Befund Session 2 | Status heute |
@@ -91,7 +95,7 @@ flowchart LR
 
 ## Top-Befunde
 
-### 1. 🟡 Beschluss-PDF crasht bei Nicht-WinAnsi-Zeichen (Confidence: high, ⚡ Quick Win)
+### 1. ✅ Beschluss-PDF crasht bei Nicht-WinAnsi-Zeichen (behoben in e70fce8)
 
 `buildDossierPdf` sanitized jeden Text auf WinAnsi ([pdf.js:133](server/services/pdf.js:133)),
 `buildResolutionPdf` **nicht**. Standard-Helvetica kann nur Latin-1: ein Emoji, ein
@@ -104,7 +108,7 @@ Drive-Upload nach der letzten Unterschrift schlaegt still fehl** (nur Log-Zeile)
 **Fix B:** Unicode-Font einbetten (fontkit + TTF) — loest es grundsaetzlich, aber
 groesserer Eingriff und neue Assets. Fuer den Use-Case reicht A.
 
-### 2. 🟡 LLM-Endpoints ohne Rate-Limit = offener Kostendeckel (Confidence: high, ⚡ Quick Win)
+### 2. ✅ LLM-Endpoints ohne Rate-Limit = offener Kostendeckel (behoben in 159094b)
 
 `chatLimiter` (60/15 min) schuetzt nur POST `/:id/chat`. **Ungeschuetzt:**
 GET `/:id/dossier` ([resolutions.js:331](server/routes/resolutions.js:331), 1 LLM-Call
@@ -118,7 +122,7 @@ fuer backfill/retitle, 20/15 min fuer dossier) + ein simples in-memory
 **Fix B:** globaler Limiter auf alle /api-Routen — einfacher, aber trifft auch das
 Polling (`/chat/status` alle 1,5 s) und muesste hoch konfiguriert werden. A ist gezielter.
 
-### 3. 🟡 Entfernter Gesellschafter behaelt Zugang bis zu 30 Tage (Confidence: high, ⚡ Quick Win)
+### 3. ✅ Entfernter Gesellschafter behaelt Zugang bis zu 30 Tage (behoben in 1f67dde)
 
 `isAllowed` wird nur beim **Login** geprueft ([auth.js:10](server/auth.js:10));
 `requireAuth` prueft nur, ob der User in `users` existiert — und Users werden nie
@@ -164,7 +168,7 @@ UI-Flows (compose-Polling/Resume, Signatur-Flow, hints-Anzeige) haben kein Netz.
 (z. B. compose-Status-Polling mit gemocktem api) — nicht die volle UI.
 Alternativ: bewusst so lassen und hier dokumentieren. Kein Ratchet-Umbau noetig.
 
-### 7. 🟡 19 genutzte Env-Vars fehlen im .env.example (Confidence: medium, ⚡ Quick Win)
+### 7. ✅ 19 genutzte Env-Vars fehlen im .env.example (behoben in b6953a2 via docs/ENV.md)
 
 Helper meldet u. a. `SESSION_SECRET`, `APP_URL`, `VAPID_*`, `BACKUP_*`, `DATA_DIR`,
 `GOOGLE_SA_KEY`, `DRIVE_ROOT_FOLDER_ID` als undokumentiert (server/.env* ist fuer
