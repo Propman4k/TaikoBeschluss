@@ -10,6 +10,7 @@ export default function Settings() {
   const [newName, setNewName] = useState('')
   const [editing, setEditing] = useState(null) // { id, name }
   const [backfilling, setBackfilling] = useState(false)
+  const [retitling, setRetitling] = useState(false)
   const toast = useToast()
 
   useEffect(() => {
@@ -54,6 +55,22 @@ export default function Settings() {
     }
   }
 
+  async function retitle() {
+    setRetitling(true)
+    try {
+      const r = await api.post('/api/resolution-types/retitle')
+      toast(
+        r.total === 0
+          ? 'Keine Entwürfe mit Inhalt vorhanden.'
+          : `${r.done} von ${r.total} Entwurfs-Titeln neu erzeugt${r.failed ? `, ${r.failed} fehlgeschlagen` : ''}.`,
+      )
+    } catch (err) {
+      toast(err.message, 'error')
+    } finally {
+      setRetitling(false)
+    }
+  }
+
   if (!types) return null
 
   return (
@@ -69,14 +86,24 @@ export default function Settings() {
               die KI schlägt sie höchstens im Chat vor.
             </div>
           </div>
-          <button
-            onClick={backfill}
-            disabled={backfilling}
-            className="shrink-0 inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-[6px] hover:bg-slate-50 disabled:opacity-50 transition-colors cursor-pointer"
-            title="Alle Beschlüsse ohne Typ einmalig per KI klassifizieren"
-          >
-            <Sparkles size={13} /> {backfilling ? 'Klassifiziert …' : 'Bestand klassifizieren'}
-          </button>
+          <div className="shrink-0 flex items-center gap-2">
+            <button
+              onClick={backfill}
+              disabled={backfilling}
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-[6px] hover:bg-slate-50 disabled:opacity-50 transition-colors cursor-pointer"
+              title="Alle Beschlüsse ohne Typ einmalig per KI klassifizieren"
+            >
+              <Sparkles size={13} /> {backfilling ? 'Klassifiziert …' : 'Bestand klassifizieren'}
+            </button>
+            <button
+              onClick={retitle}
+              disabled={retitling}
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-[6px] hover:bg-slate-50 disabled:opacity-50 transition-colors cursor-pointer"
+              title="Neue spezifische Titel für alle ENTWÜRFE erzeugen (freigegebene/abgeschlossene bleiben unberührt)"
+            >
+              <Sparkles size={13} /> {retitling ? 'Erzeugt Titel …' : 'Entwurfs-Titel neu erzeugen'}
+            </button>
+          </div>
         </div>
 
         <div className="divide-y divide-border">

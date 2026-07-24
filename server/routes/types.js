@@ -2,7 +2,7 @@
 // Kein DELETE — Typen mit Verwendung werden deaktiviert, nicht geloescht.
 import { Router } from 'express'
 import { db } from '../db.js'
-import { classifyResolution } from '../services/ki.js'
+import { classifyResolution, generateTitle } from '../services/ki.js'
 
 export const typesRouter = Router()
 
@@ -40,6 +40,34 @@ typesRouter.patch('/:id', (req, res) => {
     return res.status(409).json({ error: 'Typ existiert bereits' })
   }
   res.json(allTypes())
+})
+
+// Titel neu erzeugen — NUR fuer Entwuerfe (freigegebene/abgeschlossene Beschluesse
+// werden bewusst nicht automatisch umbenannt; dafuer gibt es das manuelle
+// Umbenennen im Editor). Titel ist reine App-Metadatensache (nicht im PDF).
+typesRouter.post('/retitle', async (_req, res) => {
+  const todo = db
+    .prepare(
+      `SELECT id, title, content FROM resolutions
+       WHERE status = 'entwurf' AND deleted_at IS NULL AND trim(content) != ''`,
+    )
+    .all()
+  const setTitle = db.prepare(`UPDATE resolutions SET title = ?, updated_at = datetime('now') WHERE id = ?`)
+  let done = 0
+  let failed = 0
+  for (const r of todo) {
+    try {
+      const title = await generateTitle(r)
+      if (title) {
+        setTitle.run(title, r.id)
+        done++
+      } else failed++
+    } catch (err) {
+      console.warn(`Titel-Neuerzeugung fuer Beschluss ${r.id} fehlgeschlagen:`, err.message)
+      failed++
+    }
+  }
+  res.json({ total: todo.length, done, failed })
 })
 
 // Einmaliger Backfill: klassifiziert alle Beschluesse ohne Typ (inkl. Papierkorb)

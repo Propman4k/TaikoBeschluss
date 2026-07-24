@@ -352,6 +352,30 @@ export async function runBeschlussChat({
   }
 }
 
+// Neuer Titel fuer einen Bestands-Beschluss (Einstellungen: "Titel neu erzeugen").
+export async function generateTitle({ title, content }) {
+  const parsed = await callJson({
+    system: [
+      'Du benennst deutsche Gesellschafterbeschluesse. Liefere einen kurzen, SPEZIFISCHEN Titel mit den Kern-Fakten aus dem Beschlusstext (Gegenpartei, Betrag, Jahr) — z.B. "Darlehen an Jonas Lempa (5.000 EUR)" oder "Jahresabschluss 2025 & Gewinnverwendung".',
+      'NIEMALS Floskeln wie "Gesellschafterbeschluss", den Gesellschaftsnamen oder ein Datum als Titel. Echte deutsche Umlaute (ä ö ü ß), neue Rechtschreibung.',
+    ].join('\n'),
+    messages: [{ role: 'user', content: `Bisheriger Titel: ${title || '(ohne)'}\n\nBeschlusstext:\n${content}` }],
+    schema: {
+      name: 'beschluss_titel',
+      schema: {
+        type: 'object',
+        properties: { title: { type: 'string', description: 'Der neue Titel' } },
+        required: ['title'],
+        additionalProperties: false,
+      },
+    },
+    name: 'beschluss-retitle',
+    userId: 'backfill',
+    spellcheckFields: ['title'],
+  })
+  return String(parsed.title ?? '').trim()
+}
+
 // Einmal-Klassifikation fuer den Typ-Backfill (Einstellungen): guenstig, 1 Call.
 export async function classifyResolution(typeNames, { title, content }) {
   const parsed = await callJson({

@@ -97,6 +97,25 @@ describe('resolution_types', () => {
     expect(res.body.resolution.type_name).toBe('Darlehen') // bleibt, ungueltiger Name ignoriert
   })
 
+  it('Retitle erzeugt neue Titel NUR fuer Entwuerfe mit Inhalt', async () => {
+    const r = await freshResolution()
+    await request(app)
+      .patch(`/api/resolutions/${r.id}`)
+      .send({ content: '1. Darlehen 5.000 EUR.', title: 'Gesellschafterbeschluss der Typtest GmbH' })
+    chatCompletionWithFallback.mockResolvedValue(JSON.stringify({ title: 'Darlehen an Tina Typ (5.000 EUR)' }))
+    const res = await request(app).post('/api/resolution-types/retitle')
+    expect(res.status).toBe(200)
+    expect(res.body.done).toBeGreaterThanOrEqual(1)
+    const updated = await request(app).get(`/api/resolutions/${r.id}`)
+    expect(updated.body.title).toBe('Darlehen an Tina Typ (5.000 EUR)')
+  })
+
+  it('PATCH resolutions: Titel manuell aenderbar', async () => {
+    const r = await freshResolution()
+    const res = await request(app).patch(`/api/resolutions/${r.id}`).send({ title: 'Mein manueller Titel' })
+    expect(res.body.title).toBe('Mein manueller Titel')
+  })
+
   it('Backfill klassifiziert Beschluesse ohne Typ, ueberspringt typisierte und leere', async () => {
     const r = await freshResolution()
     await request(app).patch(`/api/resolutions/${r.id}`).send({ content: '1. Entlastung wird erteilt.' })

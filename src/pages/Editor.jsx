@@ -121,6 +121,7 @@ export default function Editor({ id }) {
   const [signingFor, setSigningFor] = useState(null)
   const [composeStatus, setComposeStatus] = useState(null)
   const [types, setTypes] = useState([])
+  const [editingTitle, setEditingTitle] = useState(null)
   const chatEndRef = useRef(null)
   const pollRef = useRef(null)
   const toast = useToast()
@@ -402,8 +403,32 @@ export default function Editor({ id }) {
           >
             <ArrowLeft size={18} />
           </button>
-          <div className="min-w-0">
-            <div className="font-semibold text-sm truncate">{r.title || 'Neuer Beschluss'}</div>
+          <div className="min-w-0 flex-1">
+            {editingTitle !== null ? (
+              <input
+                value={editingTitle}
+                onChange={(e) => setEditingTitle(e.target.value)}
+                onBlur={async () => {
+                  await patch({ title: editingTitle.trim() })
+                  setEditingTitle(null)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.target.blur()
+                  if (e.key === 'Escape') setEditingTitle(null)
+                }}
+                className="input-base !text-text !text-sm !py-1"
+                autoFocus
+              />
+            ) : (
+              <button
+                onClick={() => setEditingTitle(r.title)}
+                className="group/title flex items-center gap-1.5 max-w-full cursor-text text-left"
+                title="Titel bearbeiten"
+              >
+                <span className="font-semibold text-sm truncate">{r.title || 'Neuer Beschluss'}</span>
+                <Pencil size={12} className="shrink-0 text-text-light opacity-0 group-hover/title:opacity-100" />
+              </button>
+            )}
             <div className="text-xs text-text-muted truncate">
               {r.company.name} · {r.number}
             </div>
