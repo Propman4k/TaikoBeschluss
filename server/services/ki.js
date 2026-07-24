@@ -66,10 +66,16 @@ export const CHAT_SCHEMA = {
       },
       title: {
         type: 'string',
-        description: 'Kurzer Titel des Beschlusses (z.B. "Gewinnverwendung 2025"), leer wenn unveraendert',
+        description:
+          'Kurzer, SPEZIFISCHER Titel mit den Kern-Fakten (Gegenpartei, Betrag, Jahr) — z.B. "Darlehen an Jonas Lempa (5.000 EUR)" oder "Jahresabschluss 2025 & Gewinnverwendung". NIEMALS Floskeln wie "Gesellschafterbeschluss der X GmbH" oder ein Datum als Titel. Leer wenn unveraendert.',
+      },
+      type: {
+        type: 'string',
+        description:
+          'Nur bei writeContent=true: Beschlusstyp — EXAKT ein Name aus der Typen-Liste im Kontext (sonst "Sonstiges"). Leer wenn kein Dokument geschrieben wird.',
       },
     },
-    required: ['reply', 'writeContent', 'content', 'title'],
+    required: ['reply', 'writeContent', 'content', 'title', 'type'],
     additionalProperties: false,
   },
 }
@@ -185,7 +191,7 @@ async function callJson({ system, messages, schema, name, userId, spellcheckFiel
   throw lastErr ?? new Error('keine Antwort')
 }
 
-function buildComposerSystem({ composing, resolution, company, shareholders, orgLines, userName }) {
+function buildComposerSystem({ composing, resolution, company, shareholders, orgLines, userName, typeNames }) {
   const existingContent = resolution.content
   const MODE = composing
     ? [
@@ -205,6 +211,7 @@ function buildComposerSystem({ composing, resolution, company, shareholders, org
 
   const CONTEXT = [
     `Dein Gesprächspartner ist ${userName} — "ich"/"mich" in Nutzer-Nachrichten meint diese Person.`,
+    `Beschlusstypen (wähle für "type" GENAU einen Namen aus dieser Liste — wörtlich, ohne Abwandlung; passt keiner, nimm "Sonstiges" und schlage in "reply" KNAPP einen neuen Typ vor, den der Nutzer in den Einstellungen anlegen kann): ${(typeNames ?? []).join(' | ') || 'Sonstiges'}`,
     `Gesellschaft: ${company.name} (Rechtsform: ${company.legal_form}), ${company.registry_court}, ${company.hrb}, Sitz: ${company.city}. Der Beschluss muss rechtlich zu dieser Rechtsform passen.`,
     `Gesellschafter: ${shareholders.map((s) => s.name).join(', ')}.`,
     `Datum des Beschlusses (vom Nutzer festgelegt, nicht zu hinterfragen): ${fmtDate(resolution.date)}. Prüfe zeitliche Plausibilität von Zeiträumen und Terminen relativ zu DIESEM Datum (z.B. Rückwirkung, abgelaufene vs. laufende Geschäftsjahre).`,
@@ -262,10 +269,11 @@ export async function runBeschlussChat({
   history,
   text,
   composing,
+  typeNames = [],
   onStage = () => {},
 }) {
   onStage('verfassen')
-  const system = buildComposerSystem({ composing, resolution, company, shareholders, orgLines, userName })
+  const system = buildComposerSystem({ composing, resolution, company, shareholders, orgLines, userName, typeNames })
   const messages = [...history.map((m) => ({ role: m.role, content: m.content })), { role: 'user', content: text }]
 
   const draft = await callJson({
@@ -280,6 +288,7 @@ export async function runBeschlussChat({
   draft.reply = String(draft.reply ?? '').replace(/\\n/g, '\n')
   draft.content = String(draft.content ?? '').replace(/\\n/g, '\n')
   draft.title = String(draft.title ?? '')
+  draft.type = String(draft.type ?? '')
   // Geschrieben wird AUSSCHLIESSLICH ueber den Verfassen/Aktualisieren-Button
   // (compose=true) — deterministisch, egal was das Modell liefert.
   if (!composing) draft.writeContent = false
@@ -334,10 +343,34 @@ export async function runBeschlussChat({
       writeContent: true,
       content,
       title: String(final.title ?? '').trim() || draft.title,
+      type: draft.type,
       issues: issues.length,
     }
   } catch (e) {
     console.warn('beschluss-reconcile fehlgeschlagen, Entwurf bleibt:', e.message)
     return { ...draft, issues: issues.length }
   }
+}
+
+// Einmal-Klassifikation fuer den Typ-Backfill (Einstellungen): guenstig, 1 Call.
+export async function classifyResolution(typeNames, { title, content }) {
+  const parsed = await callJson({
+    system: [
+      'Du klassifizierst deutsche Gesellschafterbeschluesse. Antworte NUR mit einem Typ aus der Liste — woertlich, ohne Abwandlung. Passt keiner eindeutig, nimm "Sonstiges".',
+      `Typen: ${typeNames.join(' | ')}`,
+    ].join('\n'),
+    messages: [{ role: 'user', content: `Titel: ${title || '(ohne)'}\n\nBeschlusstext:\n${content}` }],
+    schema: {
+      name: 'beschluss_typ',
+      schema: {
+        type: 'object',
+        properties: { type: { type: 'string', enum: typeNames } },
+        required: ['type'],
+        additionalProperties: false,
+      },
+    },
+    name: 'beschluss-classify',
+    userId: 'backfill',
+  })
+  return parsed.type
 }

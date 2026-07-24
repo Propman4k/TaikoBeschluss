@@ -12,6 +12,7 @@ import { isAllowed, requireAuth } from './auth.js'
 import { companiesRouter } from './routes/companies.js'
 import { shareholdersRouter } from './routes/shareholders.js'
 import { resolutionsRouter } from './routes/resolutions.js'
+import { typesRouter } from './routes/types.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -142,6 +143,7 @@ app.post('/api/push/unsubscribe', requireAuth, (req, res) => {
 app.use('/api/companies', requireAuth, companiesRouter)
 app.use('/api/shareholders', requireAuth, shareholdersRouter)
 app.use('/api/resolutions', requireAuth, resolutionsRouter)
+app.use('/api/resolution-types', requireAuth, typesRouter)
 
 // Zentrale Fehlerbehandlung: einheitliches JSON statt Express-Default-HTML.
 // Express 5 leitet auch abgelehnte Promises aus async-Handlern hierher.

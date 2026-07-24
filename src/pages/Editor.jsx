@@ -120,6 +120,7 @@ export default function Editor({ id }) {
   const [editingContent, setEditingContent] = useState(null)
   const [signingFor, setSigningFor] = useState(null)
   const [composeStatus, setComposeStatus] = useState(null)
+  const [types, setTypes] = useState([])
   const chatEndRef = useRef(null)
   const pollRef = useRef(null)
   const toast = useToast()
@@ -127,6 +128,7 @@ export default function Editor({ id }) {
   useEffect(() => {
     api.get(`/api/resolutions/${id}`).then(setR).catch((e) => toast(e.message, 'error'))
     api.get(`/api/resolutions/${id}/chat`).then(setChat).catch(() => {})
+    api.get('/api/resolution-types').then(setTypes).catch(() => {})
     // Laeuft serverseitig noch eine Verfassen-Pipeline (z.B. nach Reload)?
     // Dann Overlay zeigen und nach Abschluss Beschluss + Chat neu laden.
     api
@@ -498,6 +500,21 @@ export default function Editor({ id }) {
             className="input-base !w-auto !text-text"
             title="Beschlussdatum"
           />
+          <select
+            value={r.type_id ?? ''}
+            onChange={(e) => patch({ type_id: e.target.value ? Number(e.target.value) : null })}
+            className="input-base !w-auto !text-text cursor-pointer"
+            title="Beschlusstyp"
+          >
+            <option value="">Ohne Typ</option>
+            {types
+              .filter((t) => t.active || t.id === r.type_id)
+              .map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+          </select>
           <div className="flex-1" />
           {!!allSigned && (
             <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700">

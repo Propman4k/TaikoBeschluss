@@ -62,7 +62,10 @@ function fullResolution(r) {
     signed: Boolean(signature_path),
   }))
   const content = normalizeContent(r.content)
-  return { ...r, content, company, shareholders, signatures, frame: buildFrame(company, shareholders, r) }
+  const type_name = r.type_id
+    ? db.prepare('SELECT name FROM resolution_types WHERE id = ?').get(r.type_id)?.name ?? null
+    : null
+  return { ...r, content, type_name, company, shareholders, signatures, frame: buildFrame(company, shareholders, r) }
 }
 
 // ── Uebersicht: alle Beschluesse + was der eingeloggte Nutzer unterschreiben muss ──
@@ -70,6 +73,7 @@ resolutionsRouter.get('/', (req, res) => {
   const rows = db
     .prepare(
       `SELECT r.*, c.name AS company_name,
+         (SELECT name FROM resolution_types rt WHERE rt.id = r.type_id) AS type_name,
          (SELECT COUNT(*) FROM resolution_signatures rs WHERE rs.resolution_id = r.id) AS sig_total,
          (SELECT COUNT(*) FROM resolution_signatures rs
             WHERE rs.resolution_id = r.id AND rs.signature_path IS NOT NULL) AS sig_done
@@ -147,9 +151,15 @@ resolutionsRouter.patch('/:id', (req, res) => {
       return res.status(400).json({ error: 'Datum muss YYYY-MM-DD sein' })
     date = String(req.body.date)
   }
+  let typeId = r.type_id
+  if (req.body.type_id !== undefined) {
+    typeId = req.body.type_id === null ? null : Number(req.body.type_id)
+    if (typeId !== null && !db.prepare('SELECT id FROM resolution_types WHERE id = ?').get(typeId))
+      return res.status(400).json({ error: 'Unbekannter Beschlusstyp' })
+  }
   db.prepare(
-    `UPDATE resolutions SET title = ?, content = ?, date = ?, updated_at = datetime('now') WHERE id = ?`,
-  ).run(title, content, date, r.id)
+    `UPDATE resolutions SET title = ?, content = ?, date = ?, type_id = ?, updated_at = datetime('now') WHERE id = ?`,
+  ).run(title, content, date, typeId, r.id)
   // Nachbearbeitung eines bereits abgelegten, vollstaendig unterschriebenen
   // Beschlusses -> Drive-PDF ueberschreiben (Link bleibt stabil, ADR 0001)
   if (r.drive_file_id && r.status === 'freigegeben' && openSignatures(r.id) === 0) uploadToDrive(r.id)
@@ -371,6 +381,9 @@ resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
 
   try {
     db.prepare(`INSERT INTO chat_messages (resolution_id, role, content) VALUES (?, 'user', ?)`).run(r.id, text)
+    const typeRows = db
+      .prepare('SELECT id, name FROM resolution_types WHERE active = 1 ORDER BY position, id')
+      .all()
     const parsed = await runBeschlussChat({
       company,
       shareholders,
@@ -381,6 +394,7 @@ resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
       history,
       text,
       composing,
+      typeNames: typeRows.map((t) => t.name),
       onStage: (stage, extra) => composeStatus.set(String(r.id), { stage, ...extra }),
     })
     db.prepare(
@@ -389,9 +403,11 @@ resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
     // writeContent = explizites Signal, ob das Dokument geaendert werden soll.
     // Leerer content bei writeContent=true = bewusstes Leeren (nicht "unveraendert").
     if (parsed.writeContent) {
+      // Typ nur uebernehmen, wenn die KI einen gueltigen Listen-Namen geliefert hat
+      const matched = typeRows.find((t) => t.name === String(parsed.type ?? '').trim())
       db.prepare(
-        `UPDATE resolutions SET content = ?, title = ?, updated_at = datetime('now') WHERE id = ?`,
-      ).run(parsed.content, parsed.title.trim() || r.title, r.id)
+        `UPDATE resolutions SET content = ?, title = ?, type_id = ?, updated_at = datetime('now') WHERE id = ?`,
+      ).run(parsed.content, parsed.title.trim() || r.title, matched?.id ?? r.type_id, r.id)
     }
     res.json({
       reply: parsed.reply,

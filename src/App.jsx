@@ -8,6 +8,7 @@ import Companies from './pages/Companies.jsx'
 import Shareholders from './pages/Shareholders.jsx'
 import Organigram from './pages/Organigram.jsx'
 import Trash from './pages/Trash.jsx'
+import Settings from './pages/Settings.jsx'
 import Sidebar from './components/Sidebar.jsx'
 import { ToastProvider } from './components/Toast.jsx'
 
@@ -97,6 +98,8 @@ export default function App() {
                 <Organigram />
               ) : route === 'papierkorb' ? (
                 <Trash />
+              ) : route === 'einstellungen' ? (
+                <Settings />
               ) : route === 'entwuerfe' ? (
                 <Resolutions user={user} view="entwuerfe" />
               ) : route === 'abgeschlossen' ? (

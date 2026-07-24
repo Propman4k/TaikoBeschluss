@@ -163,3 +163,41 @@ try {
 } catch {
   // Spalte existiert bereits
 }
+
+// Beschluss-Typen: kuratierte Liste (KI waehlt NUR daraus; Pflege in den
+// Einstellungen — anlegen darf nur der Nutzer, die KI schlaegt nur vor).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS resolution_types (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    active INTEGER NOT NULL DEFAULT 1,
+    position INTEGER NOT NULL DEFAULT 0
+  )
+`)
+try {
+  db.exec('ALTER TABLE resolutions ADD COLUMN type_id INTEGER REFERENCES resolution_types(id)')
+} catch {
+  // Spalte existiert bereits
+}
+// Seed nur bei leerer Tabelle (kuratierte Startliste, "Sonstiges" immer zuletzt)
+if (db.prepare('SELECT COUNT(*) AS n FROM resolution_types').get().n === 0) {
+  const insert = db.prepare('INSERT INTO resolution_types (name, position) VALUES (?, ?)')
+  ;[
+    'Jahresabschluss & Gewinnverwendung',
+    'Vorabausschüttung',
+    'Darlehen',
+    'Geschäftsführung (Bestellung/Abberufung)',
+    'GF-Vergütung & Anstellung',
+    'Entlastung',
+    'Prokura & Vollmachten',
+    'Satzungsänderung',
+    'Kapitalmaßnahme',
+    'Zustimmung zu Rechtsgeschäften',
+    'Immobilien',
+    'Beteiligungen & Anteilsübertragung',
+    'Unternehmensverträge/Organschaft',
+    'Geschäftsordnung',
+    'Liquidation/Umwandlung',
+    'Sonstiges',
+  ].forEach((name, i) => insert.run(name, i))
+}

@@ -54,6 +54,13 @@ Dev-Login ohne Google OAuth: `DEV_LOGIN=1` in `server/.env`, dann
   `GOOGLE_APPLICATION_CREDENTIALS` (Pfad zum SA-Key) oder `GOOGLE_SA_KEY`
   (JSON inline).
 - **SignatureModal** 1:1 aus TaikoEat uebernommen.
+- **Beschluss-Typen** (`resolution_types`, kuratierte Liste, Seed in db.js): KI
+  waehlt beim Verfassen NUR aus der aktiven Liste ("Sonstiges" = Fallback,
+  neue Typen schlaegt sie nur vor — anlegen darf allein der Nutzer auf der
+  Einstellungen-Seite). Badge + Typ-Filter in den Listen, Dropdown im Editor,
+  POST /api/resolution-types/backfill = einmalige KI-Klassifikation des
+  Bestands (Button in den Einstellungen). Titel-Regel: spezifisch mit
+  Gegenpartei/Betrag/Jahr, keine "Gesellschafterbeschluss der X"-Floskeln.
 
 ## Offen / spaeter
 

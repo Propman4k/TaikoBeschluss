@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { FileSignature, LogOut, X, ScrollText, ChevronDown, Network, Bell, BellOff } from 'lucide-react'
+import { FileSignature, LogOut, X, ScrollText, ChevronDown, Network, Bell, BellOff, Settings } from 'lucide-react'
 import { api } from '../api.js'
 import { useToast } from './Toast.jsx'
 
@@ -188,6 +188,13 @@ export default function Sidebar({ route, user, counts = {}, mobileOpen, onClose 
       <div className="flex-1 px-3 py-2 space-y-0.5">
         <BeschluesseGroup route={route} counts={c} />
         <StrukturGroup route={route} />
+        <a
+          href="#/einstellungen"
+          className={`${itemBase} ${route === 'einstellungen' ? 'bg-blue-50 text-[#0014FF] font-medium' : itemIdle}`}
+        >
+          <Settings size={16} strokeWidth={2} />
+          Einstellungen
+        </a>
       </div>
       <div className="px-3 py-4 border-t border-border">
         <div className="px-3 text-xs text-text-muted truncate">{user.name || user.email}</div>

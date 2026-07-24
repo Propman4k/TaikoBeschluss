@@ -68,7 +68,14 @@ function Row({ r, onDelete, onUpload }) {
   return (
     <div className="group flex items-center gap-4 bg-surface rounded-[10px] shadow-card border border-border px-5 py-4 hover:border-brand/30 transition-colors">
       <a href={`#/beschluss/${r.id}`} className={`flex-1 min-w-0 ${GRID}`}>
-        <div className="text-sm font-medium truncate">{r.title || 'Ohne Titel'}</div>
+        <div className="min-w-0 flex items-center gap-2">
+          {!!r.type_name && (
+            <span className="shrink-0 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[11px] font-medium">
+              {r.type_name}
+            </span>
+          )}
+          <span className="text-sm font-medium truncate">{r.title || 'Ohne Titel'}</span>
+        </div>
         <div className="text-sm text-text-muted truncate">{r.company_name}</div>
         {/* Beschlussdatum (steht auf dem Dokument), nicht Anlage-Datum */}
         <div className="text-sm text-text-muted">{fmtDate(r.date)}</div>
@@ -104,8 +111,8 @@ function List({ items, onDelete, onUpload }) {
   )
 }
 
-// Custom-Dropdown fuer den Gesellschafts-Filter (Look wie die Header-Buttons)
-function CompanyFilter({ companies, value, onChange }) {
+// Custom-Dropdown fuer Listen-Filter (Gesellschaft, Typ) — Look wie die Header-Buttons
+function SelectFilter({ options: items, allLabel, value, onChange }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
   useEffect(() => {
@@ -117,7 +124,7 @@ function CompanyFilter({ companies, value, onChange }) {
     return () => document.removeEventListener('mousedown', close)
   }, [open])
 
-  const options = [{ id: 'alle', name: 'Alle Gesellschaften' }, ...companies]
+  const options = [{ id: 'alle', name: allLabel }, ...items]
   const current = options.find((o) => String(o.id) === String(value)) ?? options[0]
 
   return (
@@ -157,6 +164,8 @@ export default function Resolutions({ view = 'offen' }) {
   const [companies, setCompanies] = useState([])
   const [picking, setPicking] = useState(false)
   const [filter, setFilter] = useState('alle')
+  const [types, setTypes] = useState([])
+  const [typeFilter, setTypeFilter] = useState('alle')
   const [deleting, setDeleting] = useState(null) // { r, step: 1|2 }
   const toast = useToast()
 
@@ -164,6 +173,7 @@ export default function Resolutions({ view = 'offen' }) {
   useEffect(() => {
     load()
     api.get('/api/companies').then(setCompanies).catch(() => {})
+    api.get('/api/resolution-types').then(setTypes).catch(() => {})
   }, [])
 
   async function createFor(companyId) {
@@ -198,8 +208,9 @@ export default function Resolutions({ view = 'offen' }) {
 
   if (!data) return null
   const del = (res) => setDeleting({ r: res, step: 1 })
-  const base =
+  const byCompany =
     filter === 'alle' ? data.resolutions : data.resolutions.filter((r) => r.company_id === Number(filter))
+  const base = typeFilter === 'alle' ? byCompany : byCompany.filter((r) => r.type_id === Number(typeFilter))
   const toSignSet = new Set(data.toSign)
 
   // Drei Buckets: Entwuerfe (in Bearbeitung), Zu unterschreiben (freigegeben,
@@ -227,7 +238,8 @@ export default function Resolutions({ view = 'offen' }) {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold">{TITLES[view]}</h1>
         <div className="flex items-center gap-3">
-          <CompanyFilter companies={companies} value={filter} onChange={setFilter} />
+          <SelectFilter options={types} allLabel="Alle Typen" value={typeFilter} onChange={setTypeFilter} />
+          <SelectFilter options={companies} allLabel="Alle Gesellschaften" value={filter} onChange={setFilter} />
           <button
             onClick={() => setPicking(true)}
             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-brand hover:bg-brand-hover rounded-[6px] transition-colors cursor-pointer"
