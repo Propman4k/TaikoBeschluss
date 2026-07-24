@@ -170,6 +170,9 @@ function HintsBubble({ hints }) {
   )
 }
 
+// Default-Hoehe des Chat-Eingabefelds (25% hoeher als die fruehere 70px-Minimalhoehe)
+const INPUT_MIN_H = 88
+
 export default function Editor({ id }) {
   const [r, setR] = useState(null)
   const [chat, setChat] = useState([])
@@ -180,6 +183,7 @@ export default function Editor({ id }) {
   const [composeStatus, setComposeStatus] = useState(null)
   const [types, setTypes] = useState([])
   const [editingTitle, setEditingTitle] = useState(null)
+  const [inputHeight, setInputHeight] = useState(INPUT_MIN_H) // nur fuer die Sitzung
   const chatEndRef = useRef(null)
   const pollRef = useRef(null)
   const toast = useToast()
@@ -542,6 +546,27 @@ export default function Editor({ id }) {
             </button>
           )}
           <div className="relative">
+            {/* Griff an der Oberkante: hochziehen = groesser (Hoehe nur fuer die Sitzung) */}
+            <div
+              onPointerDown={(e) => {
+                e.preventDefault()
+                e.currentTarget.setPointerCapture(e.pointerId)
+                const startY = e.clientY
+                const startH = inputHeight
+                const maxH = Math.round(window.innerHeight * 0.5)
+                const onMove = (ev) => setInputHeight(Math.min(maxH, Math.max(INPUT_MIN_H, startH + (startY - ev.clientY))))
+                const onUp = () => {
+                  window.removeEventListener('pointermove', onMove)
+                  window.removeEventListener('pointerup', onUp)
+                }
+                window.addEventListener('pointermove', onMove)
+                window.addEventListener('pointerup', onUp)
+              }}
+              className="group/grip absolute -top-1.5 left-0 right-0 h-3 z-10 cursor-ns-resize touch-none flex items-center justify-center"
+              title="Ziehen zum Vergrößern"
+            >
+              <div className="w-10 h-1 rounded-full bg-slate-200 opacity-0 group-hover/grip:opacity-100 transition-opacity" />
+            </div>
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -551,9 +576,9 @@ export default function Editor({ id }) {
                   send(e)
                 }
               }}
-              rows={2}
+              style={{ height: inputHeight }}
               placeholder="Was soll beschlossen werden?"
-              className="input-base !text-text resize-none min-h-[70px] !pr-10 focus:!ring-0 focus:!border-slate-200"
+              className="input-base !text-text resize-none !pr-10 focus:!ring-0 focus:!border-slate-200"
             />
             <button
               type="submit"
