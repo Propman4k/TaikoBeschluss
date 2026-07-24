@@ -3,6 +3,7 @@ import { ArrowLeft, Send, FileDown, PenLine, Check, Pencil, Loader2, Sparkles, S
 import { api, fmtDate } from '../api.js'
 import { useToast } from '../components/Toast.jsx'
 import SignatureModal from '../components/SignatureModal.jsx'
+import Dropdown from '../components/Dropdown.jsx'
 import { PAGE, usePagination } from '../usePagination.js'
 
 // Stufen der Verfassen-Pipeline (Server: services/ki.js). Die Detail-Zeilen
@@ -525,21 +526,12 @@ export default function Editor({ id }) {
             className="input-base !w-auto !text-text"
             title="Beschlussdatum"
           />
-          <select
+          <Dropdown
+            align="left"
+            options={[{ id: '', name: 'Ohne Typ' }, ...types.filter((t) => t.active || t.id === r.type_id)]}
             value={r.type_id ?? ''}
-            onChange={(e) => patch({ type_id: e.target.value ? Number(e.target.value) : null })}
-            className="input-select !w-auto !text-text cursor-pointer"
-            title="Beschlusstyp"
-          >
-            <option value="">Ohne Typ</option>
-            {types
-              .filter((t) => t.active || t.id === r.type_id)
-              .map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-          </select>
+            onChange={(v) => patch({ type_id: v ? Number(v) : null })}
+          />
           <div className="flex-1" />
           {!!allSigned && (
             <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700">

@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
-import { Plus, CheckCircle2, CircleDashed, Trash2, ChevronRight, ChevronDown, Check, ExternalLink, CloudUpload } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Plus, CheckCircle2, CircleDashed, Trash2, ChevronRight, ExternalLink, CloudUpload } from 'lucide-react'
 import { api, fmtDate } from '../api.js'
 import { useToast } from '../components/Toast.jsx'
+import Dropdown from '../components/Dropdown.jsx'
 
 function StatusBadge({ r }) {
   if (r.status === 'entwurf')
@@ -111,50 +112,9 @@ function List({ items, onDelete, onUpload }) {
   )
 }
 
-// Custom-Dropdown fuer Listen-Filter (Gesellschaft, Typ) — Look wie die Header-Buttons
+// Listen-Filter = gemeinsame Dropdown-Komponente mit vorangestellter "Alle"-Option
 function SelectFilter({ options: items, allLabel, value, onChange }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef(null)
-  useEffect(() => {
-    if (!open) return
-    const close = (e) => {
-      if (!ref.current?.contains(e.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [open])
-
-  const options = [{ id: 'alle', name: allLabel }, ...items]
-  const current = options.find((o) => String(o.id) === String(value)) ?? options[0]
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-[6px] hover:bg-slate-50 transition-colors cursor-pointer"
-      >
-        {current.name}
-        <ChevronDown size={15} className={`text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {!!open && (
-        <div className="absolute right-0 top-full mt-1.5 z-20 min-w-full w-max bg-surface rounded-[10px] shadow-elevated border border-border p-1">
-          {options.map((o) => (
-            <button
-              key={o.id}
-              onClick={() => {
-                onChange(String(o.id))
-                setOpen(false)
-              }}
-              className="w-full flex items-center justify-between gap-6 text-left px-3 py-2 text-sm rounded-[6px] hover:bg-blue-50 transition-colors cursor-pointer"
-            >
-              {o.name}
-              {String(o.id) === String(value) && <Check size={14} className="text-brand" />}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
+  return <Dropdown options={[{ id: 'alle', name: allLabel }, ...items]} value={value} onChange={onChange} />
 }
 
 const isDone = (r) => r.sig_total > 0 && r.sig_done >= r.sig_total
