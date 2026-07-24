@@ -21,7 +21,9 @@ export function requireAuth(req, res, next) {
   const user = db
     .prepare('SELECT id, email, name FROM users WHERE id = ?')
     .get(req.session.userId)
-  if (!user) return res.status(401).json({ error: 'nicht eingeloggt' })
+  // isAllowed auch hier (nicht nur beim Login): wer als Gesellschafter entfernt
+  // wird, verliert den Zugang sofort — nicht erst nach Session-Ablauf (30 Tage).
+  if (!user || !isAllowed(user.email)) return res.status(401).json({ error: 'nicht eingeloggt' })
   req.user = user
   next()
 }
