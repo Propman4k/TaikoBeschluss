@@ -61,6 +61,11 @@ Dev-Login ohne Google OAuth: `DEV_LOGIN=1` in `server/.env`, dann
   POST /api/resolution-types/backfill = einmalige KI-Klassifikation des
   Bestands (Button in den Einstellungen). Titel-Regel: spezifisch mit
   Gegenpartei/Betrag/Jahr, keine "Gesellschafterbeschluss der X"-Floskeln.
+- **Hinweis-Bubble**: `resolutions.hints` (JSON-Array) — die KI kuratiert je
+  Chat-Turn die VOLLSTAENDIGE Liste der rechtlichen Hinweise (voller Ersatz
+  wie beim Beschlusstext; kein Array geliefert = Liste bleibt). Editor zeigt
+  Bubble mit Counter (grau 0 / orange), Overlay-Karte listet alle. Hinweise
+  sind App-Metadaten, stehen nie im Dokument/PDF.
 
 ## Offen / spaeter
 
