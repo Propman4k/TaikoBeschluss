@@ -386,6 +386,30 @@ export async function generateTitle({ title, content }) {
   return String(parsed.title ?? '').trim()
 }
 
+// Kurzzusammenfassung der Mandanten-Anfrage fuer das Pruefdossier (1 Call).
+export async function summarizeRequest(transcript) {
+  const parsed = await callJson({
+    system: [
+      'Du fasst fuer ein anwaltliches Pruefdossier zusammen, was der Mandant von der KI wollte.',
+      'Liefere 2-4 kurze Saetze auf Deutsch (echte Umlaute): Was soll beschlossen werden, mit welchen Eckpunkten (Betrag, Parteien, Konditionen), und welche Wuensche/Aenderungen kamen im Verlauf dazu. Keine rechtliche Bewertung — nur die Anfrage.',
+    ].join('\n'),
+    messages: [{ role: 'user', content: `Gespraechsverlauf:\n${transcript}` }],
+    schema: {
+      name: 'anfrage_zusammenfassung',
+      schema: {
+        type: 'object',
+        properties: { summary: { type: 'string' } },
+        required: ['summary'],
+        additionalProperties: false,
+      },
+    },
+    name: 'dossier-summary',
+    userId: 'dossier',
+    spellcheckFields: ['summary'],
+  })
+  return String(parsed.summary ?? '').trim()
+}
+
 // Einmal-Klassifikation fuer den Typ-Backfill (Einstellungen): guenstig, 1 Call.
 export async function classifyResolution(typeNames, { title, content }) {
   const parsed = await callJson({

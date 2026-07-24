@@ -248,6 +248,23 @@ describe('POST /api/resolutions/:id/chat', () => {
     expect(res.body).toEqual({ stage: null })
   })
 
+  it('Dossier: liefert PDF mit KI-Zusammenfassung, LLM-Ausfall faellt auf erste Nachricht zurueck', async () => {
+    const r = await freshResolution()
+    await request(app).patch(`/api/resolutions/${r.id}`).send({ content: '1. Testpunkt.' })
+    db.prepare(`INSERT INTO chat_messages (resolution_id, role, content) VALUES (?, 'user', 'Darlehen 5000 Euro bitte')`).run(r.id)
+    chatCompletionWithFallback.mockResolvedValue(JSON.stringify({ summary: 'Mandant will ein Darlehen.' }))
+    let res = await request(app).get(`/api/resolutions/${r.id}/dossier`)
+    expect(res.status).toBe(200)
+    expect(res.headers['content-type']).toContain('application/pdf')
+    expect(res.body.subarray(0, 5).toString()).toBe('%PDF-')
+
+    // LLM kaputt -> trotzdem 200 (Fallback-Zusammenfassung)
+    chatCompletionWithFallback.mockRejectedValue(new Error('boom'))
+    res = await request(app).get(`/api/resolutions/${r.id}/dossier`)
+    expect(res.status).toBe(200)
+    expect(res.body.subarray(0, 5).toString()).toBe('%PDF-')
+  })
+
   it('doppelt-escapte Umbrueche im content werden normalisiert', async () => {
     const r = await freshResolution()
     chatCompletionWithFallback.mockResolvedValue(

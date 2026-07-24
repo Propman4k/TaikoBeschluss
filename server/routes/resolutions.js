@@ -4,8 +4,8 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { db, SIGNATURES_DIR } from '../db.js'
 import { buildFrame, normalizeContent } from '../services/beschluss.js'
-import { buildResolutionPdf, readSignatures } from '../services/pdf.js'
-import { runBeschlussChat } from '../services/ki.js'
+import { buildResolutionPdf, buildDossierPdf, readSignatures } from '../services/pdf.js'
+import { runBeschlussChat, summarizeRequest } from '../services/ki.js'
 import { isPng } from '../services/png.js'
 import { notifyResolution } from '../services/push.js'
 import { uploadResolutionPdf } from '../services/drive.js'
@@ -53,6 +53,31 @@ const signaturesOf = (resolutionId) =>
        WHERE rs.resolution_id = ?`,
     )
     .all(resolutionId)
+
+// Gesamte Beteiligungsstruktur als Textzeilen — Kontext fuer die KI und
+// Parteien-Abschnitt im Pruefdossier (Verflechtungen statt Nachfragen).
+function orgLines() {
+  const orgRows = db
+    .prepare(
+      `SELECT c.name AS company, c.managing_directors, s.name, s.type, s.signer_name, cs.shares
+       FROM company_shareholders cs
+       JOIN companies c ON c.id = cs.company_id
+       JOIN shareholders s ON s.id = cs.shareholder_id
+       ORDER BY c.position, c.id, cs.position`,
+    )
+    .all()
+  const byCompany = {}
+  for (const row of orgRows) (byCompany[row.company] ??= []).push(row)
+  return Object.entries(byCompany).map(([name, rows]) => {
+    const parts = rows.map((x) => {
+      const share = x.shares != null ? ` ${x.shares}%` : ''
+      const via = x.type === 'company' ? `, vertreten durch ${x.signer_name}` : ' (natürliche Person)'
+      return `${x.name}${share}${via}`
+    })
+    const gf = rows[0].managing_directors ? ` Geschäftsführung: ${rows[0].managing_directors}.` : ''
+    return `- ${name}: ${parts.join('; ')}.${gf}`
+  })
+}
 
 function fullResolution(r) {
   const company = companyOf(r)
@@ -300,6 +325,43 @@ resolutionsRouter.get('/:id/pdf', async (req, res) => {
     .send(pdf)
 })
 
+// ── Pruefdossier: strukturiertes PDF fuer die anwaltliche Kontrolle ──
+// Anfrage-Zusammenfassung (KI, mit deterministischem Fallback), Parteien-
+// Struktur, kompletter Chatverlauf, gesammelte Hinweise, Beschlusspunkte.
+resolutionsRouter.get('/:id/dossier', async (req, res) => {
+  const r = activeResolution(req.params.id)
+  if (!r) return res.status(404).json({ error: 'nicht gefunden' })
+  const company = companyOf(r)
+  const chat = db
+    .prepare('SELECT role, content, created_at FROM chat_messages WHERE resolution_id = ? ORDER BY id')
+    .all(r.id)
+  let hints = []
+  try {
+    hints = JSON.parse(r.hints || '[]')
+  } catch {
+    hints = []
+  }
+
+  let summary = ''
+  if (chat.length) {
+    const transcript = chat.map((m) => `${m.role === 'user' ? 'Mandant' : 'Anwalt'}: ${m.content}`).join('\n')
+    try {
+      summary = await summarizeRequest(transcript)
+    } catch (err) {
+      console.warn(`Dossier-Zusammenfassung fuer Beschluss ${r.id} fehlgeschlagen:`, err.message)
+      // Fallback: erste Mandanten-Nachricht statt gar keiner Zusammenfassung
+      summary = chat.find((m) => m.role === 'user')?.content ?? ''
+    }
+  }
+
+  const pdf = await buildDossierPdf({ company, resolution: r, summary, orgLines: orgLines(), chat, hints })
+  const slug = company.name.replace(/[^\w]+/g, '-')
+  res
+    .type('application/pdf')
+    .set('Content-Disposition', `inline; filename="Pruefdossier-${slug}-${r.number}.pdf"`)
+    .send(pdf)
+})
+
 // ── Drive-Ablage manuell anstossen: Retry nach Fehlschlag + Backfill fuer
 // Alt-Beschluesse. Nur fuer abgeschlossene (vollstaendig unterschriebene). ──
 resolutionsRouter.post('/:id/drive', async (req, res) => {
@@ -360,31 +422,6 @@ resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
     .prepare('SELECT role, content FROM chat_messages WHERE resolution_id = ? ORDER BY id')
     .all(r.id)
 
-  // Gesamte Beteiligungsstruktur als Kontext, damit die KI Verflechtungen
-  // (z.B. wer hinter einer Beteiligungs-GmbH steht) kennt statt nachzufragen.
-  const orgRows = db
-    .prepare(
-      `SELECT c.name AS company, c.managing_directors, s.name, s.type, s.signer_name, cs.shares
-       FROM company_shareholders cs
-       JOIN companies c ON c.id = cs.company_id
-       JOIN shareholders s ON s.id = cs.shareholder_id
-       ORDER BY c.position, c.id, cs.position`,
-    )
-    .all()
-  const byCompany = {}
-  for (const row of orgRows) (byCompany[row.company] ??= []).push(row)
-  const orgLines = Object.entries(byCompany)
-    .map(([name, rows]) => {
-      const parts = rows.map((x) => {
-        const share = x.shares != null ? ` ${x.shares}%` : ''
-        const via = x.type === 'company' ? `, vertreten durch ${x.signer_name}` : ' (natuerliche Person)'
-        return `${x.name}${share}${via}`
-      })
-      const gf = rows[0].managing_directors ? ` Geschäftsführung: ${rows[0].managing_directors}.` : ''
-      return `- ${name}: ${parts.join('; ')}.${gf}`
-    })
-    .join('\n')
-
   try {
     db.prepare(`INSERT INTO chat_messages (resolution_id, role, content) VALUES (?, 'user', ?)`).run(r.id, text)
     const typeRows = db
@@ -399,7 +436,7 @@ resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
     const parsed = await runBeschlussChat({
       company,
       shareholders,
-      orgLines,
+      orgLines: orgLines().join('\n'),
       resolution: { ...r, hintsList },
       userName: req.user.name || req.user.email,
       userId: req.user.email,

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Send, FileDown, PenLine, Check, Pencil, Loader2, Sparkles, Scale, ClipboardCheck, MessageSquareWarning } from 'lucide-react'
+import { ArrowLeft, Send, FileDown, FileSearch, PenLine, Check, Pencil, Loader2, Sparkles, Scale, ClipboardCheck, MessageSquareWarning } from 'lucide-react'
 import { api, fmtDate } from '../api.js'
 import { useToast } from '../components/Toast.jsx'
 import SignatureModal from '../components/SignatureModal.jsx'
@@ -621,6 +621,15 @@ export default function Editor({ id }) {
             </span>
           )}
           <HintsBubble hints={r.hints || []} />
+          <a
+            href={`/api/resolutions/${id}/dossier`}
+            target="_blank"
+            rel="noreferrer"
+            title="Strukturiertes Prüfdossier für die anwaltliche Kontrolle (Anfrage, Parteien, Chatverlauf, Hinweise, Beschlusspunkte)"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-[6px] hover:bg-slate-50 transition-colors"
+          >
+            <FileSearch size={15} /> Dossier
+          </a>
           <a
             href={`/api/resolutions/${id}/pdf`}
             target="_blank"
