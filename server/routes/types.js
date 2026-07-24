@@ -1,10 +1,25 @@
 // Beschluss-Typen: Pflege (Einstellungen-Seite) + einmaliger KI-Backfill.
 // Kein DELETE — Typen mit Verwendung werden deaktiviert, nicht geloescht.
 import { Router } from 'express'
+import rateLimit from 'express-rate-limit'
 import { db } from '../db.js'
 import { classifyResolution, generateTitle } from '../services/ki.js'
 
 export const typesRouter = Router()
+
+// Kostendeckel: Backfill/Retitle machen einen LLM-Call JE Beschluss.
+const bulkLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10 })
+// Doppelklick-/Parallel-Guard: ein Bulk-Lauf zur Zeit (in-memory, Single-Prozess)
+let bulkRunning = false
+const withBulkGuard = (handler) => async (req, res) => {
+  if (bulkRunning) return res.status(409).json({ error: 'Es läuft bereits ein KI-Lauf — bitte warten.' })
+  bulkRunning = true
+  try {
+    await handler(req, res)
+  } finally {
+    bulkRunning = false
+  }
+}
 
 const allTypes = () =>
   db
@@ -45,7 +60,7 @@ typesRouter.patch('/:id', (req, res) => {
 // Titel neu erzeugen — NUR fuer Entwuerfe (freigegebene/abgeschlossene Beschluesse
 // werden bewusst nicht automatisch umbenannt; dafuer gibt es das manuelle
 // Umbenennen im Editor). Titel ist reine App-Metadatensache (nicht im PDF).
-typesRouter.post('/retitle', async (_req, res) => {
+typesRouter.post('/retitle', bulkLimiter, withBulkGuard(async (_req, res) => {
   const todo = db
     .prepare(
       `SELECT id, title, content FROM resolutions
@@ -68,11 +83,11 @@ typesRouter.post('/retitle', async (_req, res) => {
     }
   }
   res.json({ total: todo.length, done, failed })
-})
+}))
 
 // Einmaliger Backfill: klassifiziert alle Beschluesse ohne Typ (inkl. Papierkorb)
 // anhand von Titel + Text. Idempotent — bereits typisierte werden uebersprungen.
-typesRouter.post('/backfill', async (_req, res) => {
+typesRouter.post('/backfill', bulkLimiter, withBulkGuard(async (_req, res) => {
   const types = allTypes().filter((t) => t.active)
   const todo = db
     .prepare(`SELECT id, title, content FROM resolutions WHERE type_id IS NULL AND trim(content) != ''`)
@@ -94,4 +109,4 @@ typesRouter.post('/backfill', async (_req, res) => {
     }
   }
   res.json({ total: todo.length, done, failed })
-})
+}))

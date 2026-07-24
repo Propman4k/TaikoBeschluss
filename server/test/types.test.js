@@ -149,4 +149,24 @@ describe('resolution_types', () => {
     expect(stillTyped.body.type_name).toBe('Entlastung')
     expect(again.status).toBe(200)
   })
+
+  it('Bulk-Guard: parallele Backfill/Retitle-Laeufe -> 409 fuer den zweiten', async () => {
+    const r = await freshResolution()
+    await request(app).patch(`/api/resolutions/${r.id}`).send({ content: '1. Prokura wird erteilt.' })
+    // Erster LLM-Call haengt, bis wir ihn aufloesen; weitere (Backfill kann
+    // mehrere Alt-Beschluesse aus anderen Tests abarbeiten) antworten sofort
+    let release
+    const answer = JSON.stringify({ type: 'Prokura & Vollmachten' })
+    chatCompletionWithFallback.mockImplementationOnce(
+      () => new Promise((resolve) => { release = () => resolve(answer) }),
+    )
+    chatCompletionWithFallback.mockResolvedValue(answer)
+    // .then() feuert den supertest-Request tatsaechlich ab (lazy sonst)
+    const first = request(app).post('/api/resolution-types/backfill').then((res) => res)
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+    const second = await request(app).post('/api/resolution-types/retitle')
+    expect(second.status).toBe(409)
+    release()
+    expect((await first).status).toBe(200)
+  })
 })

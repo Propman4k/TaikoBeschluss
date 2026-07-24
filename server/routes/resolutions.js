@@ -328,7 +328,10 @@ resolutionsRouter.get('/:id/pdf', async (req, res) => {
 // ── Pruefdossier: strukturiertes PDF fuer die anwaltliche Kontrolle ──
 // Anfrage-Zusammenfassung (KI, mit deterministischem Fallback), Parteien-
 // Struktur, kompletter Chatverlauf, gesammelte Hinweise, Beschlusspunkte.
-resolutionsRouter.get('/:id/dossier', async (req, res) => {
+// Kostendeckel: jedes Dossier ist ein LLM-Call (Zusammenfassung).
+const dossierLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20 })
+
+resolutionsRouter.get('/:id/dossier', dossierLimiter, async (req, res) => {
   const r = activeResolution(req.params.id)
   if (!r) return res.status(404).json({ error: 'nicht gefunden' })
   const company = companyOf(r)
