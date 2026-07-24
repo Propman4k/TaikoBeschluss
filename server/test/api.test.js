@@ -99,6 +99,15 @@ describe('TaikoBeschluss API', () => {
     expect(pdf.headers['content-type']).toContain('application/pdf')
     expect(pdf.body.subarray(0, 4).toString()).toBe('%PDF')
 
+    // Nicht-WinAnsi-Zeichen (Emoji, Pfeil) duerfen den Export nicht werfen —
+    // Standard-Helvetica kann nur Latin-1, der Sanitizer filtert den Rest.
+    await request(app)
+      .patch(`/api/resolutions/${res.body.id}`)
+      .send({ content: '1. Zustimmung 👍 zum Vertrag → sofort. Umlaute bleiben: äöüß.' })
+    const pdfEmoji = await request(app).get(`/api/resolutions/${res.body.id}/pdf`)
+    expect(pdfEmoji.status).toBe(200)
+    expect(pdfEmoji.body.subarray(0, 4).toString()).toBe('%PDF')
+
     // Uebersicht: beide unterschrieben -> nichts mehr offen fuer mich
     const list = await request(app).get('/api/resolutions')
     expect(list.body.resolutions).toHaveLength(1)

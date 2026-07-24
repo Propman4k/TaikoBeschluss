@@ -10,10 +10,17 @@ const BLACK = rgb(0, 0, 0)
 const BODY_SIZE = 11
 const LEADING = 16
 
-/** Text an Wortgrenzen auf maxWidth umbrechen; respektiert vorhandene \n. */
+// WinAnsi-sichere Zeichen (Standard-Helvetica kann kein volles Unicode):
+// Latin-1 + die gaengigen typografischen Zeichen; Rest (z.B. Emojis) fliegt raus.
+const sanitize = (s) =>
+  // eslint-disable-next-line no-control-regex -- \x00-\xFF = Latin-1-Bereich ist hier Absicht
+  String(s ?? '').replace(/[^\x00-\xFF€‚„“”‘’–—…•§\n]/g, '')
+
+/** Text an Wortgrenzen auf maxWidth umbrechen; respektiert vorhandene \n.
+ *  Sanitized immer auf WinAnsi — sonst wirft drawText bei Emojis & Co. */
 function wrap(text, font, size, maxWidth) {
   const lines = []
-  for (const para of String(text ?? '').split('\n')) {
+  for (const para of sanitize(text).split('\n')) {
     if (!para.trim()) {
       lines.push('')
       continue
@@ -113,8 +120,8 @@ export async function buildResolutionPdf(company, shareholders, resolution, sign
         thickness: 0.8,
         color: BLACK,
       })
-      page.drawText(s.signer_name, { x, y: y - SIG_H - 14, size: 10, font: regular })
-      page.drawText(`für ${s.name}`, {
+      page.drawText(sanitize(s.signer_name), { x, y: y - SIG_H - 14, size: 10, font: regular })
+      page.drawText(sanitize(`für ${s.name}`), {
         x,
         y: y - SIG_H - 27,
         size: 9,
@@ -127,12 +134,6 @@ export async function buildResolutionPdf(company, shareholders, resolution, sign
 
   return Buffer.from(await doc.save())
 }
-
-// WinAnsi-sichere Zeichen (Standard-Helvetica kann kein volles Unicode):
-// Latin-1 + die gaengigen typografischen Zeichen; Rest (z.B. Emojis) fliegt raus.
-const sanitize = (s) =>
-  // eslint-disable-next-line no-control-regex -- \x00-\xFF = Latin-1-Bereich ist hier Absicht
-  String(s ?? '').replace(/[^\x00-\xFF€‚„“”‘’–—…•§\n]/g, '')
 
 /**
  * Pruefdossier fuer den (echten) Anwalt: Anfrage-Zusammenfassung, Parteien-
