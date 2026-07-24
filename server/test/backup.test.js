@@ -20,6 +20,7 @@ function runBackup(extraEnv = {}) {
       DATA_DIR: dataDir,
       BACKUP_DIR: backupDir,
       OFFSITE_DIR: offsiteDir,
+      BACKUP_NOTIFY: '0', // sonst macOS-Notification bei absichtlichen Test-Fehlern
       ...extraEnv,
     },
     encoding: 'utf-8',

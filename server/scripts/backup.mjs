@@ -33,11 +33,14 @@ const log = (level, msg) => process.stdout.write(`${new Date().toISOString()} [$
 
 function die(msg) {
   log('ERROR', msg)
-  // macOS-Notification, damit Fehler auch ohne offenes Terminal auffallen
-  spawnSync('osascript', [
-    '-e',
-    `display notification ${JSON.stringify(msg)} with title "TaikoBeschluss Backup fehlgeschlagen"`,
-  ])
+  // macOS-Notification, damit Fehler auch ohne offenes Terminal auffallen.
+  // BACKUP_NOTIFY=0 unterdrueckt sie (Tests provozieren Fehler absichtlich).
+  if (process.env.BACKUP_NOTIFY !== '0') {
+    spawnSync('osascript', [
+      '-e',
+      `display notification ${JSON.stringify(msg)} with title "TaikoBeschluss Backup fehlgeschlagen"`,
+    ])
+  }
   process.exit(1)
 }
 
