@@ -184,6 +184,7 @@ export default function Editor({ id }) {
   const [types, setTypes] = useState([])
   const [editingTitle, setEditingTitle] = useState(null)
   const [inputHeight, setInputHeight] = useState(INPUT_MIN_H) // nur fuer die Sitzung
+  const [dossierBusy, setDossierBusy] = useState(false)
   const chatEndRef = useRef(null)
   const pollRef = useRef(null)
   const toast = useToast()
@@ -271,6 +272,30 @@ export default function Editor({ id }) {
       setR(await api.patch(`/api/resolutions/${id}`, fields))
     } catch (err) {
       toast(err.message, 'error')
+    }
+  }
+
+  // Pruefdossier direkt herunterladen (kein neuer Tab — die KI-Zusammenfassung
+  // dauert ein paar Sekunden, der Button zeigt solange den Lade-Zustand).
+  async function downloadDossier() {
+    if (dossierBusy) return
+    setDossierBusy(true)
+    try {
+      const res = await fetch(`/api/resolutions/${id}/dossier`)
+      if (!res.ok) throw new Error(`Fehler ${res.status}`)
+      const blob = await res.blob()
+      const name =
+        res.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1] || `Pruefdossier-${id}.pdf`
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = name
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      toast(`Dossier fehlgeschlagen: ${err.message}`, 'error')
+    } finally {
+      setDossierBusy(false)
     }
   }
 
@@ -621,15 +646,15 @@ export default function Editor({ id }) {
             </span>
           )}
           <HintsBubble hints={r.hints || []} />
-          <a
-            href={`/api/resolutions/${id}/dossier`}
-            target="_blank"
-            rel="noreferrer"
+          <button
+            onClick={downloadDossier}
+            disabled={dossierBusy}
             title="Strukturiertes Prüfdossier für die anwaltliche Kontrolle (Anfrage, Parteien, Chatverlauf, Hinweise, Beschlusspunkte)"
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-[6px] hover:bg-slate-50 transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-[6px] hover:bg-slate-50 disabled:opacity-60 transition-colors cursor-pointer"
           >
-            <FileSearch size={15} /> Dossier
-          </a>
+            {dossierBusy ? <Loader2 size={15} className="animate-spin" /> : <FileSearch size={15} />}
+            {dossierBusy ? 'Erstellt …' : 'Dossier'}
+          </button>
           <a
             href={`/api/resolutions/${id}/pdf`}
             target="_blank"

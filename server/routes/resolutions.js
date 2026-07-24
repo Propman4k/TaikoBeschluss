@@ -358,7 +358,7 @@ resolutionsRouter.get('/:id/dossier', async (req, res) => {
   const slug = company.name.replace(/[^\w]+/g, '-')
   res
     .type('application/pdf')
-    .set('Content-Disposition', `inline; filename="Pruefdossier-${slug}-${r.number}.pdf"`)
+    .set('Content-Disposition', `attachment; filename="Pruefdossier-${slug}-${r.number}.pdf"`)
     .send(pdf)
 })
 
