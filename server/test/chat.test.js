@@ -144,14 +144,29 @@ describe('POST /api/resolutions/:id/chat', () => {
     expect(chatCompletionWithFallback).toHaveBeenCalledTimes(2)
   })
 
-  it('LLM dauerhaft kaputt -> 502, User-Nachricht bleibt persistiert', async () => {
+  // Vormals blieb die Nachricht stehen; sie tauchte dann nach dem Retry doppelt
+  // im Verlauf, im Pruefdossier und in der KI-History auf -> Rollback.
+  it('LLM dauerhaft kaputt -> 502, User-Nachricht wird zurueckgerollt', async () => {
     const r = await freshResolution()
     chatCompletionWithFallback.mockRejectedValue(new Error('boom'))
     const res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'hallo' })
     expect(res.status).toBe(502)
     expect(chatCompletionWithFallback).toHaveBeenCalledTimes(3)
-    const msgs = db.prepare('SELECT role FROM chat_messages WHERE resolution_id = ?').all(r.id)
-    expect(msgs).toEqual([{ role: 'user' }])
+    expect(db.prepare('SELECT role FROM chat_messages WHERE resolution_id = ?').all(r.id)).toEqual([])
+
+    // Retry nach dem Fehlschlag: genau ein Paar im Verlauf, kein Duplikat
+    chatCompletionWithFallback.mockReset()
+    chatCompletionWithFallback.mockResolvedValue(
+      JSON.stringify({ reply: 'ok', writeContent: false, content: '', title: '', type: '' }),
+    )
+    const retry = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'hallo' })
+    expect(retry.status).toBe(200)
+    expect(
+      db.prepare('SELECT role, content FROM chat_messages WHERE resolution_id = ? ORDER BY id').all(r.id),
+    ).toEqual([
+      { role: 'user', content: 'hallo' },
+      { role: 'assistant', content: 'ok' },
+    ])
   })
 
   it('leere Nachricht -> 400, kein LLM-Call', async () => {

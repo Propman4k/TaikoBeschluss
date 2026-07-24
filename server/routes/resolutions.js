@@ -425,8 +425,14 @@ resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
     .prepare('SELECT role, content FROM chat_messages WHERE resolution_id = ? ORDER BY id')
     .all(r.id)
 
+  // Die Nutzer-Nachricht muss VOR dem Call stehen (sie ist Teil des Kontexts),
+  // darf aber bei einem Fehlschlag nicht zurueckbleiben — sonst steht sie nach
+  // dem Retry doppelt im Verlauf, im Pruefdossier und in der KI-History.
+  const userMsgId = db
+    .prepare(`INSERT INTO chat_messages (resolution_id, role, content) VALUES (?, 'user', ?)`)
+    .run(r.id, text).lastInsertRowid
+
   try {
-    db.prepare(`INSERT INTO chat_messages (resolution_id, role, content) VALUES (?, 'user', ?)`).run(r.id, text)
     const typeRows = db
       .prepare('SELECT id, name FROM resolution_types WHERE active = 1 ORDER BY position, id')
       .all()
@@ -477,6 +483,7 @@ resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
     })
   } catch (err) {
     console.error('chat failed:', err.message)
+    db.prepare('DELETE FROM chat_messages WHERE id = ?').run(userMsgId)
     res.status(502).json({ error: 'KI-Anfrage fehlgeschlagen. Bitte erneut versuchen.' })
   } finally {
     composeStatus.delete(String(r.id))
