@@ -112,6 +112,20 @@ describe('TaikoBeschluss API', () => {
     const list = await request(app).get('/api/resolutions')
     expect(list.body.resolutions).toHaveLength(1)
     expect(list.body.toSign).toHaveLength(0)
+
+    // Restore-Szenario: die DB kommt aus Prod und traegt fremde absolute Pfade
+    // (/app/data/...). Die Unterschriften muessen trotzdem gefunden werden.
+    db.prepare(
+      `UPDATE resolution_signatures SET signature_path = '/app/data/signatures/' || ?
+       WHERE resolution_id = ? AND shareholder_id = ?`,
+    ).run(`res${res.body.id}-sh${sh.body.id}.png`, res.body.id, sh.body.id)
+    const restoredPng = await request(app).get(`/api/resolutions/${res.body.id}/sign/${sh.body.id}`)
+    expect(restoredPng.status).toBe(200)
+    expect(restoredPng.headers['content-type']).toContain('image/png')
+    const restoredPdf = await request(app).get(`/api/resolutions/${res.body.id}/pdf`)
+    expect(restoredPdf.status).toBe(200)
+    // PDF mit eingebettetem Signatur-Bild ist deutlich groesser als ohne
+    expect(restoredPdf.body.length).toBeGreaterThan(2000)
   })
 
   it('Nummern-Vergabe: keine Wiederverwendung nach endgueltigem Loeschen', async () => {

@@ -2,6 +2,7 @@
 // variabler Beschlussteil, Unterschriftszeilen mit eingebetteten Signatur-PNGs.
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import fs from 'node:fs'
+import { signatureFile } from '../db.js'
 import { buildFrame, normalizeContent, fmtDate } from './beschluss.js'
 
 const A4 = { w: 595.28, h: 841.89 }
@@ -238,7 +239,7 @@ export function readSignatures(rows) {
   for (const row of rows) {
     if (!row.signature_path) continue
     try {
-      map.set(row.shareholder_id, fs.readFileSync(row.signature_path))
+      map.set(row.shareholder_id, fs.readFileSync(signatureFile(row.signature_path)))
     } catch {
       // Datei fehlt -> Zeile bleibt unsigniert im PDF
     }

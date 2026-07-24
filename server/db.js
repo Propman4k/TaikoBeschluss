@@ -11,6 +11,15 @@ for (const dir of [DATA_DIR, SIGNATURES_DIR]) {
   fs.mkdirSync(dir, { recursive: true })
 }
 
+// Signatur-Pfade in der DB sind absolut und damit an das DATA_DIR gebunden, in
+// dem sie entstanden sind (Prod: /app/data). Beim Lesen deshalb IMMER hierueber
+// gehen: der Dateiname ist die eigentliche Information (res<id>-sh<id>.png bzw.
+// shareholder-<id>.png), das Verzeichnis kommt vom laufenden Prozess. Sonst
+// findet ein auf einem anderen Pfad wiederhergestelltes Backup die
+// Unterschriften nicht — PDFs kaemen still ohne sie heraus.
+export const signatureFile = (stored) =>
+  stored ? path.join(SIGNATURES_DIR, path.basename(stored)) : null
+
 export const db = new Database(path.join(DATA_DIR, 'taikobeschluss.db'))
 db.pragma('journal_mode = WAL')
 db.pragma('foreign_keys = ON')

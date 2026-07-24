@@ -2,7 +2,7 @@ import { Router } from 'express'
 import rateLimit from 'express-rate-limit'
 import path from 'node:path'
 import fs from 'node:fs'
-import { db, SIGNATURES_DIR } from '../db.js'
+import { db, SIGNATURES_DIR, signatureFile } from '../db.js'
 import { buildFrame, normalizeContent } from '../services/beschluss.js'
 import { buildResolutionPdf, buildDossierPdf, readSignatures } from '../services/pdf.js'
 import { runBeschlussChat, summarizeRequest } from '../services/ki.js'
@@ -227,7 +227,7 @@ resolutionsRouter.delete('/:id/permanent', (req, res) => {
   if (!info.changes)
     return res.status(409).json({ error: 'Nur Beschluesse aus dem Papierkorb koennen endgueltig geloescht werden' })
   for (const row of rows) {
-    if (row.signature_path) fs.rmSync(row.signature_path, { force: true })
+    if (row.signature_path) fs.rmSync(signatureFile(row.signature_path), { force: true })
   }
   res.status(204).end()
 })
@@ -264,7 +264,7 @@ resolutionsRouter.post('/:id/sign/:shareholderId', (req, res) => {
 
   // Leerer Body = Unterschrift entfernen
   if (!req.body || !req.body.length) {
-    if (row.signature_path) fs.rmSync(row.signature_path, { force: true })
+    if (row.signature_path) fs.rmSync(signatureFile(row.signature_path), { force: true })
     db.prepare(
       'UPDATE resolution_signatures SET signature_path = NULL, signed_at = NULL, signed_by = NULL WHERE id = ?',
     ).run(row.id)
@@ -303,9 +303,9 @@ resolutionsRouter.get('/:id/sign/:shareholderId', (req, res) => {
       'SELECT signature_path FROM resolution_signatures WHERE resolution_id = ? AND shareholder_id = ?',
     )
     .get(req.params.id, req.params.shareholderId)
-  if (!row?.signature_path || !fs.existsSync(row.signature_path))
-    return res.status(404).json({ error: 'keine Unterschrift' })
-  res.type('png').send(fs.readFileSync(row.signature_path))
+  const file = signatureFile(row?.signature_path)
+  if (!file || !fs.existsSync(file)) return res.status(404).json({ error: 'keine Unterschrift' })
+  res.type('png').send(fs.readFileSync(file))
 })
 
 // ── PDF ──

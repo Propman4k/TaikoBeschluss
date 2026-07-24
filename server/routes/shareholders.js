@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import path from 'node:path'
 import fs from 'node:fs'
-import { db, SIGNATURES_DIR } from '../db.js'
+import { db, SIGNATURES_DIR, signatureFile } from '../db.js'
 import { isPng } from '../services/png.js'
 
 export const shareholdersRouter = Router()
@@ -64,7 +64,7 @@ shareholdersRouter.delete('/:id', (req, res) => {
   const sh = db.prepare('SELECT default_signature_path FROM shareholders WHERE id = ?').get(req.params.id)
   const info = db.prepare('DELETE FROM shareholders WHERE id = ?').run(req.params.id)
   if (!info.changes) return res.status(404).json({ error: 'nicht gefunden' })
-  if (sh?.default_signature_path) fs.rmSync(sh.default_signature_path, { force: true })
+  if (sh?.default_signature_path) fs.rmSync(signatureFile(sh.default_signature_path), { force: true })
   res.status(204).end()
 })
 
@@ -82,14 +82,15 @@ shareholdersRouter.post('/:id/signature', (req, res) => {
 
 shareholdersRouter.get('/:id/signature', (req, res) => {
   const sh = db.prepare('SELECT default_signature_path FROM shareholders WHERE id = ?').get(req.params.id)
-  if (!sh?.default_signature_path || !fs.existsSync(sh.default_signature_path))
-    return res.status(404).json({ error: 'keine Standard-Unterschrift' })
-  res.type('png').send(fs.readFileSync(sh.default_signature_path))
+  const file = signatureFile(sh?.default_signature_path)
+  if (!file || !fs.existsSync(file)) return res.status(404).json({ error: 'keine Standard-Unterschrift' })
+  res.type('png').send(fs.readFileSync(file))
 })
 
 shareholdersRouter.delete('/:id/signature', (req, res) => {
   const sh = db.prepare('SELECT default_signature_path FROM shareholders WHERE id = ?').get(req.params.id)
-  if (sh?.default_signature_path) fs.rmSync(sh.default_signature_path, { force: true })
+  if (!sh) return res.status(404).json({ error: 'nicht gefunden' })
+  if (sh.default_signature_path) fs.rmSync(signatureFile(sh.default_signature_path), { force: true })
   db.prepare('UPDATE shareholders SET default_signature_path = NULL WHERE id = ?').run(req.params.id)
   res.json(getSafe(req.params.id))
 })
