@@ -108,7 +108,7 @@ export default function Shareholders() {
       </div>
 
       {items.length === 0 && (
-        <div className="bg-surface rounded-[10px] shadow-card border border-border px-6 py-10 text-sm text-text-muted text-center">
+        <div className="bg-slate-100 rounded-[10px] px-5 py-4 text-sm text-text-muted text-center">
           Noch keine Gesellschafter angelegt.
         </div>
       )}
