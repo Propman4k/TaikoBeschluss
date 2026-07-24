@@ -97,6 +97,23 @@ describe('resolution_types', () => {
     expect(res.body.resolution.type_name).toBe('Darlehen') // bleibt, ungueltiger Name ignoriert
   })
 
+  it('Diskussionsmodus: Erst-Zuordnung des Typs, bestehender Typ wird nie ueberschrieben', async () => {
+    const r = await freshResolution()
+    chatCompletionWithFallback.mockResolvedValue(
+      JSON.stringify({ reply: 'Frage 1: Betrag?', writeContent: false, content: '', title: '', type: 'Darlehen' }),
+    )
+    let res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'Darlehen an mich' })
+    expect(res.body.wrote).toBe(false)
+    expect(res.body.resolution.type_name).toBe('Darlehen')
+
+    // KI meint jetzt etwas anderes -> bestehende Zuordnung bleibt
+    chatCompletionWithFallback.mockResolvedValue(
+      JSON.stringify({ reply: 'ok', writeContent: false, content: '', title: '', type: 'Entlastung' }),
+    )
+    res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'noch eine Frage' })
+    expect(res.body.resolution.type_name).toBe('Darlehen')
+  })
+
   it('Retitle erzeugt neue Titel NUR fuer Entwuerfe mit Inhalt', async () => {
     const r = await freshResolution()
     await request(app)

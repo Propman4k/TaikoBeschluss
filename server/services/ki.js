@@ -72,7 +72,7 @@ export const CHAT_SCHEMA = {
       type: {
         type: 'string',
         description:
-          'Nur bei writeContent=true: Beschlusstyp — EXAKT ein Name aus der Typen-Liste im Kontext (sonst "Sonstiges"). Leer wenn kein Dokument geschrieben wird.',
+          'Beschlusstyp — EXAKT ein Name aus der Typen-Liste im Kontext (sonst "Sonstiges"). Setze ihn, SOBALD das Thema des Beschlusses erkennbar ist — auch im Diskussionsmodus, waehrend du noch Fragen stellst. Leer nur, wenn das Thema noch voellig unklar ist.',
       },
     },
     required: ['reply', 'writeContent', 'content', 'title', 'type'],
@@ -205,6 +205,7 @@ function buildComposerSystem({ composing, resolution, company, shareholders, org
           ? 'DISKUSSIONS-MODUS (Entwurf vorhanden): Du schreibst in diesem Modus NIEMALS das Dokument — writeContent ist IMMER false, content bleibt leer. Du bist beratender Fachanwalt: Beantworte Fragen zum Entwurf, diskutiere und sammle Änderungswünsche, weise auf rechtliche und steuerliche Fallstricke hin (nutze die NORM-BIBLIOTHEK). Wenn der Nutzer eine Änderung anfordert, bestätige KNAPP, was du ändern würdest, und erinnere ihn daran, dass die Änderung erst mit dem Button "Aktualisieren" in den Beschluss übernommen wird.'
           : 'DISKUSSIONS-MODUS: Es gibt noch keinen Beschlussentwurf. In diesem Modus schreibst du NIEMALS das Dokument — writeContent ist IMMER false, content bleibt leer. Du bist beratender Fachanwalt: Beantworte Fragen, diskutiere Gestaltungsoptionen, weise proaktiv auf rechtliche und steuerliche Fallstricke hin (nutze die NORM-BIBLIOTHEK: Formerfordernisse, notarielle Beurkundung, Stimmverbote, vGA-Risiken) und sammle die wesentlichen Eckpunkte des geplanten Beschlusses.',
         'Wenn für den Beschluss essentielle Angaben fehlen (Beträge, Zinssatz, Laufzeit, Daten, Konditionen, Beteiligte), frage gezielt nach — GENAU EINE Frage pro Antwort im Format "Frage X: <Frage>". Beim ERSTEN Nachfragen nenne kurz die Anzahl offener Fragen. Reine Diskussionsbeiträge des Nutzers beantwortest du aber einfach, ohne eine Frage anzuhängen.',
+        'Setze "type" bereits jetzt, sobald erkennbar ist, worum es geht (exakt ein Name aus der Typen-Liste) — der Beschluss wird damit in der Übersicht einsortiert, noch bevor er verfasst ist.',
         'Geht es um die Zustimmung zu einem Vertrag (Darlehen, Kauf, Miete o.Ä.), stelle als ERSTE Frage: Gibt es einen separaten Vertrag (mit Bezeichnung) bzw. soll einer aufgesetzt werden — oder soll der Beschluss selbst die Konditionen regeln? Existiert ein separater Vertrag, entfallen alle Konditions-Fragen (Zinssatz, Laufzeit usw.) — der Beschluss braucht dann nur die Eckpunkte (Parteien, Betrag/Gegenstand, Bezeichnung). Der Vertrag wird EXAKT so bezeichnet, wie der Nutzer ihn nennt — erfinde weder eine Bezeichnung noch ein Vertragsdatum; hat der Nutzer keine Bezeichnung genannt, frage danach oder verwende den Platzhalter "[Bezeichnung/Datum des Vertrags]".',
         `Sobald aus deiner Sicht alles Wesentliche geklärt ist, sag dem Nutzer in einem kurzen Satz, dass er über den Button "${existingContent ? 'Aktualisieren' : 'Verfassen'}" den Beschluss ${existingContent ? 'aktualisieren' : 'erstellen'} lassen kann.`,
       ]

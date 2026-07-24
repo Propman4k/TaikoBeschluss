@@ -402,12 +402,16 @@ resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
     ).run(r.id, parsed.reply, parsed.writeContent ? 1 : 0)
     // writeContent = explizites Signal, ob das Dokument geaendert werden soll.
     // Leerer content bei writeContent=true = bewusstes Leeren (nicht "unveraendert").
+    // Typ nur uebernehmen, wenn die KI einen gueltigen Listen-Namen geliefert hat
+    const matched = typeRows.find((t) => t.name === String(parsed.type ?? '').trim())
     if (parsed.writeContent) {
-      // Typ nur uebernehmen, wenn die KI einen gueltigen Listen-Namen geliefert hat
-      const matched = typeRows.find((t) => t.name === String(parsed.type ?? '').trim())
       db.prepare(
         `UPDATE resolutions SET content = ?, title = ?, type_id = ?, updated_at = datetime('now') WHERE id = ?`,
       ).run(parsed.content, parsed.title.trim() || r.title, matched?.id ?? r.type_id, r.id)
+    } else if (matched && !r.type_id) {
+      // Diskussionsmodus: Erst-Zuordnung sobald das Thema erkennbar ist —
+      // eine manuelle oder bestehende Zuordnung wird hier NIE ueberschrieben.
+      db.prepare(`UPDATE resolutions SET type_id = ?, updated_at = datetime('now') WHERE id = ?`).run(matched.id, r.id)
     }
     res.json({
       reply: parsed.reply,

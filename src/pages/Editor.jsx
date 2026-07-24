@@ -528,7 +528,7 @@ export default function Editor({ id }) {
           <select
             value={r.type_id ?? ''}
             onChange={(e) => patch({ type_id: e.target.value ? Number(e.target.value) : null })}
-            className="input-base !w-auto !text-text cursor-pointer"
+            className="input-select !w-auto !text-text cursor-pointer"
             title="Beschlusstyp"
           >
             <option value="">Ohne Typ</option>
