@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Send, FileDown, FileSearch, PenLine, Check, Pencil, Loader2, Sparkles, Scale, ClipboardCheck, MessageSquareWarning } from 'lucide-react'
-import { api, fmtDate } from '../api.js'
+import { api, fmtDate, rawRequest } from '../api.js'
 import { useToast } from '../components/Toast.jsx'
 import SignatureModal from '../components/SignatureModal.jsx'
 import Dropdown from '../components/Dropdown.jsx'
@@ -248,6 +248,9 @@ export default function Editor({ id }) {
   async function compose() {
     if (sending) return
     setComposeStatus({ stage: 'verfassen' })
+    // Laeuft schon ein Poller (Resume nach Reload), wuerde er sonst verwaisen
+    // und bis zum Seitenwechsel weiterpollen.
+    clearInterval(pollRef.current)
     pollRef.current = setInterval(() => {
       api
         .get(`/api/resolutions/${id}/chat/status`)
@@ -281,8 +284,7 @@ export default function Editor({ id }) {
     if (dossierBusy) return
     setDossierBusy(true)
     try {
-      const res = await fetch(`/api/resolutions/${id}/dossier`)
-      if (!res.ok) throw new Error(`Fehler ${res.status}`)
+      const res = await rawRequest(`/api/resolutions/${id}/dossier`)
       const blob = await res.blob()
       const name =
         res.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1] || `Pruefdossier-${id}.pdf`
@@ -310,15 +312,11 @@ export default function Editor({ id }) {
 
   async function saveSignature(blob) {
     try {
-      const res = await fetch(`/api/resolutions/${id}/sign/${signingFor}`, {
+      const res = await rawRequest(`/api/resolutions/${id}/sign/${signingFor}`, {
         method: 'POST',
         headers: { 'Content-Type': 'image/png' },
         body: blob ?? new Blob([], { type: 'image/png' }),
       })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || `Fehler ${res.status}`)
-      }
       setR(await res.json())
       setSigningFor(null)
       toast(blob ? 'Unterschrieben' : 'Unterschrift entfernt')

@@ -1,6 +1,22 @@
+// Roher Zugriff mit der gemeinsamen Fehler-Behandlung (401 -> Login-Screen,
+// Server-Fehlertext als Error). Fuer Faelle, die die Response selbst brauchen:
+// PDF-Blobs, PNG-Uploads.
+export async function rawRequest(path, options = {}) {
+  const res = await fetch(path, options)
+  if (res.status === 401) {
+    window.dispatchEvent(new Event('auth-expired'))
+    throw new Error('nicht eingeloggt')
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.error || `Fehler ${res.status}`)
+  }
+  return res
+}
+
 async function request(path, options = {}) {
   const isBlob = options.body instanceof Blob
-  const res = await fetch(path, {
+  const res = await rawRequest(path, {
     ...options,
     headers: {
       ...(isBlob ? {} : { 'Content-Type': 'application/json' }),
@@ -11,14 +27,6 @@ async function request(path, options = {}) {
         ? options.body
         : JSON.stringify(options.body),
   })
-  if (res.status === 401) {
-    window.dispatchEvent(new Event('auth-expired'))
-    throw new Error('nicht eingeloggt')
-  }
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}))
-    throw new Error(data.error || `Fehler ${res.status}`)
-  }
   return res.status === 204 ? null : res.json()
 }
 

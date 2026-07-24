@@ -64,6 +64,11 @@ TMP_JSON="${BACKUP_DIR}/.taikobeschluss_${DATE}.tables.json.tmp"
   sqlite3 -json "$TMP_DB" "SELECT * FROM shareholders;" || echo '[]'
   echo ',"company_shareholders":'
   sqlite3 -json "$TMP_DB" "SELECT * FROM company_shareholders;" || echo '[]'
+  # Chat traegt das Pruefdossier (Nachweis gegenueber dem Anwalt), Typen die Zuordnung
+  echo ',"chat_messages":'
+  sqlite3 -json "$TMP_DB" "SELECT * FROM chat_messages;" || echo '[]'
+  echo ',"resolution_types":'
+  sqlite3 -json "$TMP_DB" "SELECT * FROM resolution_types;" || echo '[]'
   echo ',"users":'
   sqlite3 -json "$TMP_DB" "SELECT id, email, name FROM users;" || echo '[]'
   echo '}'

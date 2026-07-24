@@ -48,7 +48,7 @@ const WRITING_RULES = [
   'Bei writeContent=true gibst du in "content" IMMER den vollständigen neuen Beschlusstext zurück (nicht nur die Änderung).',
 ]
 
-export const CHAT_SCHEMA = {
+const CHAT_SCHEMA = {
   name: 'beschluss_chat',
   schema: {
     type: 'object',
@@ -144,7 +144,7 @@ const RECONCILE_SCHEMA = {
 // ── Rechtschreib-Detektor (deterministisch): fehlende Umlaute ODER
 // ß-Hyperkorrektur nach alter Rechtschreibung ("daß", "Abschluß", "angemeßen").
 // False Positives kosten nur einen Retry — lieber einmal zu oft.
-export function badGermanSpelling(...texts) {
+function badGermanSpelling(...texts) {
   const all = texts.filter(Boolean).join(' ')
   if (!all.trim()) return false
   const noUmlauts =

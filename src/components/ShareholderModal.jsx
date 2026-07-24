@@ -2,7 +2,7 @@
 // genutzt von Shareholders-Seite und Organigramm.
 import { useRef, useState } from 'react'
 import { PenLine, Upload, Trash2, Building2, User } from 'lucide-react'
-import { api } from '../api.js'
+import { api, rawRequest } from '../api.js'
 import { useToast } from './Toast.jsx'
 import SignatureModal from './SignatureModal.jsx'
 
@@ -31,19 +31,23 @@ export default function ShareholderModal({ shareholder, onClose, onSaved, onChan
     }
   }
 
-  async function saveDrawnSig(blob) {
-    setSigModal(false)
-    if (!blob) return removeSig()
-    const res = await fetch(`/api/shareholders/${editing.id}/signature`, {
+  // PNG-Upload braucht die rohe Response — rawRequest bringt die gemeinsame
+  // Fehler-Behandlung mit (401 fuehrt zum Login statt zu "fehlgeschlagen").
+  const putSignature = (blob) =>
+    rawRequest(`/api/shareholders/${editing.id}/signature`, {
       method: 'POST',
       headers: { 'Content-Type': 'image/png' },
       body: blob,
-    })
-    if (res.ok) {
-      afterSigChange(await res.json())
+    }).then((res) => res.json())
+
+  async function saveDrawnSig(blob) {
+    setSigModal(false)
+    if (!blob) return removeSig()
+    try {
+      afterSigChange(await putSignature(blob))
       toast('Standard-Unterschrift gespeichert')
-    } else {
-      toast('Speichern fehlgeschlagen', 'error')
+    } catch (err) {
+      toast(`Speichern fehlgeschlagen: ${err.message}`, 'error')
     }
   }
 
@@ -58,16 +62,11 @@ export default function ShareholderModal({ shareholder, onClose, onSaved, onChan
       canvas.height = img.height
       canvas.getContext('2d').drawImage(img, 0, 0)
       canvas.toBlob(async (blob) => {
-        const res = await fetch(`/api/shareholders/${editing.id}/signature`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'image/png' },
-          body: blob,
-        })
-        if (res.ok) {
-          afterSigChange(await res.json())
+        try {
+          afterSigChange(await putSignature(blob))
           toast('Standard-Unterschrift hochgeladen')
-        } else {
-          toast('Upload fehlgeschlagen', 'error')
+        } catch (err) {
+          toast(`Upload fehlgeschlagen: ${err.message}`, 'error')
         }
         URL.revokeObjectURL(url)
       }, 'image/png')

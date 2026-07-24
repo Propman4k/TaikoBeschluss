@@ -101,11 +101,11 @@ export default function App() {
               ) : route === 'einstellungen' ? (
                 <Settings />
               ) : route === 'entwuerfe' ? (
-                <Resolutions user={user} view="entwuerfe" />
+                <Resolutions view="entwuerfe" />
               ) : route === 'abgeschlossen' ? (
-                <Resolutions user={user} view="abgeschlossen" />
+                <Resolutions view="abgeschlossen" />
               ) : (
-                <Resolutions user={user} view="offen" />
+                <Resolutions view="offen" />
               )}
             </main>
           )}
