@@ -62,10 +62,16 @@ function fullResolution(r) {
     signed: Boolean(signature_path),
   }))
   const content = normalizeContent(r.content)
+  let hints = []
+  try {
+    hints = JSON.parse(r.hints || '[]')
+  } catch {
+    hints = []
+  }
   const type_name = r.type_id
     ? db.prepare('SELECT name FROM resolution_types WHERE id = ?').get(r.type_id)?.name ?? null
     : null
-  return { ...r, content, type_name, company, shareholders, signatures, frame: buildFrame(company, shareholders, r) }
+  return { ...r, content, hints, type_name, company, shareholders, signatures, frame: buildFrame(company, shareholders, r) }
 }
 
 // ── Uebersicht: alle Beschluesse + was der eingeloggte Nutzer unterschreiben muss ──
@@ -384,11 +390,17 @@ resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
     const typeRows = db
       .prepare('SELECT id, name FROM resolution_types WHERE active = 1 ORDER BY position, id')
       .all()
+    let hintsList = []
+    try {
+      hintsList = JSON.parse(r.hints || '[]')
+    } catch {
+      hintsList = []
+    }
     const parsed = await runBeschlussChat({
       company,
       shareholders,
       orgLines,
-      resolution: r,
+      resolution: { ...r, hintsList },
       userName: req.user.name || req.user.email,
       userId: req.user.email,
       history,
@@ -412,6 +424,11 @@ resolutionsRouter.post('/:id/chat', chatLimiter, async (req, res) => {
       // Diskussionsmodus: Erst-Zuordnung sobald das Thema erkennbar ist —
       // eine manuelle oder bestehende Zuordnung wird hier NIE ueberschrieben.
       db.prepare(`UPDATE resolutions SET type_id = ?, updated_at = datetime('now') WHERE id = ?`).run(matched.id, r.id)
+    }
+    // Kuratierte Hinweis-Liste (voller Ersatz je Turn, wie der Beschlusstext).
+    // null = Modell hat kein Array geliefert -> bestehende Liste unangetastet.
+    if (Array.isArray(parsed.hints)) {
+      db.prepare(`UPDATE resolutions SET hints = ? WHERE id = ?`).run(JSON.stringify(parsed.hints), r.id)
     }
     res.json({
       reply: parsed.reply,

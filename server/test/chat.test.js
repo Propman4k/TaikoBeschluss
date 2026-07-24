@@ -218,6 +218,29 @@ describe('POST /api/resolutions/:id/chat', () => {
     expect(res.body.reply).toBe('Beschluss für die Gesellschaft erstellt.')
   })
 
+  it('Hinweis-Liste: KI-kuratierte hints werden gespeichert und ersetzt, null laesst sie stehen', async () => {
+    const r = await freshResolution()
+    chatCompletionWithFallback.mockResolvedValue(
+      llmReply({ reply: 'ok', writeContent: false, content: '', title: '', type: '', hints: ['Stimmverbot nach § 47 Abs. 4 GmbHG.'] }),
+    )
+    let res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'Darlehen an GF' })
+    expect(res.body.resolution.hints).toEqual(['Stimmverbot nach § 47 Abs. 4 GmbHG.'])
+
+    // Naechster Turn kuratiert: ersetzt die Liste komplett
+    chatCompletionWithFallback.mockResolvedValue(
+      llmReply({ reply: 'ok', writeContent: false, content: '', title: '', type: '', hints: ['Neuer Hinweis.'] }),
+    )
+    res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'weiter' })
+    expect(res.body.resolution.hints).toEqual(['Neuer Hinweis.'])
+
+    // Kein hints-Feld in der Antwort -> bestehende Liste bleibt unangetastet
+    chatCompletionWithFallback.mockResolvedValue(
+      llmReply({ reply: 'ok', writeContent: false, content: '', title: '', type: '' }),
+    )
+    res = await request(app).post(`/api/resolutions/${r.id}/chat`).send({ message: 'noch was' })
+    expect(res.body.resolution.hints).toEqual(['Neuer Hinweis.'])
+  })
+
   it('Status-Endpoint: ohne laufende Pipeline stage=null', async () => {
     const r = await freshResolution()
     const res = await request(app).get(`/api/resolutions/${r.id}/chat/status`)

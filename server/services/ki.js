@@ -74,8 +74,14 @@ export const CHAT_SCHEMA = {
         description:
           'Beschlusstyp — EXAKT ein Name aus der Typen-Liste im Kontext (sonst "Sonstiges"). Setze ihn, SOBALD das Thema des Beschlusses erkennbar ist — auch im Diskussionsmodus, waehrend du noch Fragen stellst. Leer nur, wenn das Thema noch voellig unklar ist.',
       },
+      hints: {
+        type: 'array',
+        items: { type: 'string' },
+        description:
+          'Die VOLLSTAENDIGE, aktuelle Liste der rechtlichen und steuerlichen Hinweise zu diesem Beschluss — je Eintrag EIN kurzer Satz mit Norm (z.B. "Stimmverbot der Lempa Beteiligungs GmbH nach § 47 Abs. 4 GmbHG — Fahldieck Beteiligungs GmbH fasst den Beschluss allein."). Du kuratierst sie wie den Beschlusstext: weiterhin gueltige Hinweise aus dem Kontext uebernehmen, ueberholte streichen, neue ergaenzen. Leeres Array nur, wenn es wirklich keine Hinweise gibt.',
+      },
     },
-    required: ['reply', 'writeContent', 'content', 'title', 'type'],
+    required: ['reply', 'writeContent', 'content', 'title', 'type', 'hints'],
     additionalProperties: false,
   },
 }
@@ -218,6 +224,7 @@ function buildComposerSystem({ composing, resolution, company, shareholders, org
     `Datum des Beschlusses (vom Nutzer festgelegt, nicht zu hinterfragen): ${fmtDate(resolution.date)}. Prüfe zeitliche Plausibilität von Zeiträumen und Terminen relativ zu DIESEM Datum (z.B. Rückwirkung, abgelaufene vs. laufende Geschäftsjahre).`,
     `Beteiligungsstruktur der gesamten Firmengruppe (nutze dieses Wissen über Beteiligungen, Quoten und Verflechtungen, statt danach zu fragen):\n${orgLines}`,
     `Aktueller Beschlusstext:\n${existingContent || '(noch leer)'}`,
+    `Aktuelle Hinweis-Liste (kuratiere sie in "hints" weiter):\n${(resolution.hintsList ?? []).map((h) => `- ${h}`).join('\n') || '(leer)'}`,
   ]
 
   return [...BASE, ...MODE, NORM_LIB, ...CONTEXT].join('\n')
@@ -290,6 +297,7 @@ export async function runBeschlussChat({
   draft.content = String(draft.content ?? '').replace(/\\n/g, '\n')
   draft.title = String(draft.title ?? '')
   draft.type = String(draft.type ?? '')
+  draft.hints = Array.isArray(draft.hints) ? draft.hints.map((h) => String(h).trim()).filter(Boolean) : null
   // Geschrieben wird AUSSCHLIESSLICH ueber den Verfassen/Aktualisieren-Button
   // (compose=true) — deterministisch, egal was das Modell liefert.
   if (!composing) draft.writeContent = false
@@ -345,6 +353,7 @@ export async function runBeschlussChat({
       content,
       title: String(final.title ?? '').trim() || draft.title,
       type: draft.type,
+      hints: draft.hints,
       issues: issues.length,
     }
   } catch (e) {

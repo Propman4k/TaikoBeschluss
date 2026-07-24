@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Send, FileDown, PenLine, Check, Pencil, Loader2, Sparkles, Scale, ClipboardCheck } from 'lucide-react'
+import { ArrowLeft, Send, FileDown, PenLine, Check, Pencil, Loader2, Sparkles, Scale, ClipboardCheck, MessageSquareWarning } from 'lucide-react'
 import { api, fmtDate } from '../api.js'
 import { useToast } from '../components/Toast.jsx'
 import SignatureModal from '../components/SignatureModal.jsx'
@@ -109,6 +109,63 @@ function ComposeOverlay({ status }) {
           Dauert etwa eine Minute — der Entwurf wird wie in einer Kanzlei erst verfasst und dann gegengeprüft.
         </div>
       </div>
+    </div>
+  )
+}
+
+// Bubble in der Kopfzeile: sammelt die von der KI kuratierten rechtlichen
+// Hinweise. Grau bei 0, orange sobald Eintraege da sind; Klick = Overlay-Karte.
+function HintsBubble({ hints }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (e) => {
+      if (!ref.current?.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+
+  const active = hints.length > 0
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        title={active ? 'Rechtliche Hinweise anzeigen' : 'Keine rechtlichen Hinweise'}
+        className={`relative inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-[6px] border transition-colors cursor-pointer ${
+          active
+            ? 'text-amber-700 bg-amber-50 border-amber-300 hover:bg-amber-100'
+            : 'text-slate-400 bg-white border-slate-300 hover:bg-slate-50'
+        }`}
+      >
+        <MessageSquareWarning size={15} />
+        {hints.length}
+      </button>
+      {!!open && (
+        <div className="absolute right-0 top-full mt-1.5 z-30 w-[420px] max-h-[60vh] overflow-y-auto bg-surface rounded-[10px] shadow-elevated border border-border">
+          <div className="px-4 py-3 border-b border-border bg-slate-50 text-sm font-semibold">
+            Rechtliche Hinweise
+          </div>
+          {hints.length === 0 ? (
+            <div className="px-4 py-6 text-sm text-text-muted text-center">Keine Hinweise zu diesem Beschluss.</div>
+          ) : (
+            <ul className="p-2 space-y-1">
+              {hints.map((h, i) => (
+                <li key={i} className="flex gap-2.5 px-2.5 py-2 rounded-[6px] text-sm leading-relaxed hover:bg-amber-50/60">
+                  <span className="shrink-0 mt-0.5 text-amber-500">
+                    <MessageSquareWarning size={14} />
+                  </span>
+                  {h}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="px-4 py-2.5 border-t border-border text-[11px] text-text-light">
+            Von der KI gepflegt — aktualisiert sich mit jedem Chat-Verlauf. Die Hinweise stehen nicht im Dokument.
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -538,6 +595,7 @@ export default function Editor({ id }) {
               <Check size={15} /> Vollständig unterschrieben
             </span>
           )}
+          <HintsBubble hints={r.hints || []} />
           <a
             href={`/api/resolutions/${id}/pdf`}
             target="_blank"

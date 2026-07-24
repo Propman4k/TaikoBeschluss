@@ -179,6 +179,12 @@ try {
 } catch {
   // Spalte existiert bereits
 }
+// Gesammelte rechtliche Hinweise (JSON-Array, von der KI je Turn kuratiert)
+try {
+  db.exec("ALTER TABLE resolutions ADD COLUMN hints TEXT NOT NULL DEFAULT '[]'")
+} catch {
+  // Spalte existiert bereits
+}
 // Seed nur bei leerer Tabelle (kuratierte Startliste, "Sonstiges" immer zuletzt)
 if (db.prepare('SELECT COUNT(*) AS n FROM resolution_types').get().n === 0) {
   const insert = db.prepare('INSERT INTO resolution_types (name, position) VALUES (?, ?)')
